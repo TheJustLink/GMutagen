@@ -14,8 +14,9 @@ class Test
 
         var bulletTemplate = new ObjectTemplate();
         bulletTemplate.Add<IPosition>(new DefaultPosition(vector2Repository));
+        bulletTemplate.Add<INextPosition>(new DefaultPosition(vector2Repository));
 
-        
+
         var obj = objectCreator.Create(bulletTemplate);
 
         var position = obj.Get<IPosition>();
@@ -31,7 +32,7 @@ interface IPosition : IValue<Vector2>
 {
 }
 
-class DefaultPosition : ValueFromRepository<Vector2>, IPosition
+class DefaultPosition : ValueFromRepository<Vector2>, INextPosition
 {
     public DefaultPosition(MemoryValueRepository<Vector2> repository) : base(repository)
     {
@@ -40,6 +41,8 @@ class DefaultPosition : ValueFromRepository<Vector2>, IPosition
     public DefaultPosition(MemoryValueRepository<Vector2> repository, int index) : base(repository, index)
     {
     }
+
+
 }
 
 public abstract class Repository<T> : IRepository<T>
@@ -294,6 +297,13 @@ public class DirectValueFromRepository<T> : ValueFromRepository<T>
         set => _directValue.Value = value;
     }
 }
+
+
+// value
+//   |
+// objectRepository
+//   |
+// globalRepository
 
 public class MemoryValueRepository<T>
 {
