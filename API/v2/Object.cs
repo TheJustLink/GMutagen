@@ -92,7 +92,7 @@ public class ObjectCreator
 
     private readonly MemoryRepository<Dictionary<Type, int>> _objectsMap = new();
     private readonly MemoryRepository<object> _contractsMap = new();
-    //private MemoryRepository<object> _contracts = new();
+    
 
     public ObjectCreator()
     {

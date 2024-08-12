@@ -19,7 +19,7 @@ class Test
         var obj = objectCreator.Create(bulletTemplate);
 
         var position = obj.Get<IPosition>();
-        var value = position.Value; // Id ?
+        var value = position.Value;
     }
 }
 
@@ -27,11 +27,11 @@ interface INextPosition : IPosition
 {
 }
 
-interface IPosition : Object<Vector2>
+interface IPosition : IValue<Vector2>
 {
 }
 
-class DefaultPosition : ObjectFromRepository<Vector2>, IPosition
+class DefaultPosition : ValueFromRepository<Vector2>, IPosition
 {
     public DefaultPosition(MemoryValueRepository<Vector2> repository) : base(repository)
     {
@@ -116,7 +116,6 @@ public class ObjectCreator
     private readonly MemoryRepository<Dictionary<Type, int>> _objectsMap = new();
 
     private readonly MemoryRepository<object> _contractsMap = new();
-    //private MemoryRepository<object> _contracts = new();
 
     public ObjectCreator()
     {
@@ -158,7 +157,7 @@ public class ObjectCreator
 }
 
 
-public interface Object<T>
+public interface IValue<T>
 {
     T Value { get; set; }
 }
@@ -167,7 +166,7 @@ public class ValueUtil
 {
     private static Dictionary<Type, ICloneable> _typeMap = new Dictionary<Type, ICloneable>
     {
-        { typeof(Vector2), new Vector2Object() },
+        { typeof(Vector2), new Vector2Value() },
     };
 
     public ValueUtil()
@@ -179,19 +178,19 @@ public class ValueUtil
         _typeMap = typeMap;
     }
 
-    public static Object<T> GetValue<T>()
+    public static IValue<T> GetValue<T>()
     {
         var obj = _typeMap[typeof(T)];
-        return (Object<T>)obj.Clone();
+        return (IValue<T>)obj.Clone();
     }
 }
 
-public class ObjectFromRepository<T> : Object<T>
+public class ValueFromRepository<T> : IValue<T>
 {
     protected int Index;
     protected readonly MemoryValueRepository<T> Repository;
 
-    public ObjectFromRepository(MemoryValueRepository<T> repository)
+    public ValueFromRepository(MemoryValueRepository<T> repository)
     {
         Repository = repository;
         var value = ValueUtil.GetValue<T>();
@@ -199,7 +198,7 @@ public class ObjectFromRepository<T> : Object<T>
         Index = Repository.IndexOf(value);
     }
 
-    public ObjectFromRepository(MemoryValueRepository<T> repository, int index)
+    public ValueFromRepository(MemoryValueRepository<T> repository, int index)
     {
         Repository = repository;
         Index = index;
@@ -220,9 +219,9 @@ public class ObjectFromRepository<T> : Object<T>
         Index = index;
     }
 
-    public void SetOtherIndex(Object<T> @object)
+    public void SetOtherIndex(IValue<T> obj)
     {
-        Index = Repository.IndexOf(@object);
+        Index = Repository.IndexOf(obj);
     }
 
     public T Value
@@ -232,42 +231,42 @@ public class ObjectFromRepository<T> : Object<T>
     }
 }
 
-public class Vector2Object : Object<Vector2>, ICloneable
+public class Vector2Value : IValue<Vector2>, ICloneable
 {
     public Vector2 Value { get; set; }
 
     public object Clone()
     {
-        return new Vector2Object();
+        return new Vector2Value();
     }
 }
 
-public class DirectObjectFromRepository<T> : ObjectFromRepository<T>
+public class DirectValueFromRepository<T> : ValueFromRepository<T>
 {
     private int _index;
     private readonly MemoryValueRepository<T> _repository;
-    private Object<T> _directObject;
+    private IValue<T> _directValue;
 
-    public DirectObjectFromRepository(MemoryValueRepository<T> repository, int index) : base(repository, index)
+    public DirectValueFromRepository(MemoryValueRepository<T> repository, int index) : base(repository, index)
     {
         _repository = repository;
         _index = index;
-        _directObject = GetDirectValue(repository, index);
+        _directValue = GetDirectValue(repository, index);
     }
 
-    public DirectObjectFromRepository(MemoryValueRepository<T> repository, int index, Object<T> directObject) : base(
+    public DirectValueFromRepository(MemoryValueRepository<T> repository, int index, IValue<T> directValue) : base(
         repository,
         index)
     {
         _repository = repository;
         _index = index;
-        _directObject = directObject;
+        _directValue = directValue;
     }
 
-    private Object<T> GetDirectValue(MemoryValueRepository<T> repository, int index)
+    private IValue<T> GetDirectValue(MemoryValueRepository<T> repository, int index)
     {
         var value = repository[index];
-        while (value is ObjectFromRepository<T> valueFromRepository)
+        while (value is ValueFromRepository<T> valueFromRepository)
         {
             index = valueFromRepository.GetIndex();
             repository = valueFromRepository.GetRepository();
@@ -280,59 +279,59 @@ public class DirectObjectFromRepository<T> : ObjectFromRepository<T>
     public void SetOtherIndex(int index)
     {
         _index = index;
-        _directObject = GetDirectValue(_repository, _index);
+        _directValue = GetDirectValue(_repository, _index);
     }
 
-    public void SetOtherIndex(Object<T> @object)
+    public void SetOtherIndex(IValue<T> value)
     {
-        _index = _repository.IndexOf(@object);
-        _directObject = GetDirectValue(_repository, _index);
+        _index = _repository.IndexOf(value);
+        _directValue = GetDirectValue(_repository, _index);
     }
 
     public T Value
     {
-        get => _directObject.Value;
-        set => _directObject.Value = value;
+        get => _directValue.Value;
+        set => _directValue.Value = value;
     }
 }
 
 public class MemoryValueRepository<T>
 {
-    private readonly List<Object<T>> _values;
+    private readonly List<IValue<T>> _values;
 
     public MemoryValueRepository()
     {
-        _values = new List<Object<T>>();
+        _values = new List<IValue<T>>();
     }
 
-    public MemoryValueRepository(List<Object<T>> values)
+    public MemoryValueRepository(List<IValue<T>> values)
     {
         _values = values;
     }
 
-    public Object<T> this[int index] => _values[index];
+    public IValue<T> this[int index] => _values[index];
 
-    public MemoryValueRepository<T> Add(Object<T> @object)
+    public MemoryValueRepository<T> Add(IValue<T> value)
     {
-        _values.Add(@object);
+        _values.Add(value);
         return this;
     }
 
-    public MemoryValueRepository<T> Remove(Object<T> @object)
+    public MemoryValueRepository<T> Remove(IValue<T> value)
     {
-        _values.Remove(@object);
+        _values.Remove(value);
         return this;
     }
 
-    public int IndexOf(Object<T> targetObject)
+    public int IndexOf(IValue<T> targetValue)
     {
         for (int i = 0; i < _values.Count; i++)
         {
             var value = _values[i];
-            if (object.ReferenceEquals(value, targetObject))
+            if (object.ReferenceEquals(value, targetValue))
                 return i;
         }
 
-        throw new ArgumentException("Value is not represent in repository " + targetObject);
+        throw new ArgumentException("Value is not represent in repository " + targetValue);
     }
 }
