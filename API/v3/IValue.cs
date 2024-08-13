@@ -197,8 +197,7 @@ public class ValueFromRepository<T> : IValue<T>
     {
         Repository = repository;
         var value = ValueUtil.GetValue<T>();
-        Repository.Add(value);
-        Index = Repository.IndexOf(value);
+        Index = Repository.Add(value);
     }
 
     public ValueFromRepository(MemoryValueRepository<T> repository, int index)
@@ -299,12 +298,6 @@ public class DirectValueFromRepository<T> : ValueFromRepository<T>
 }
 
 
-// value
-//   |
-// objectRepository
-//   |
-// globalRepository
-
 public class MemoryValueRepository<T>
 {
     private readonly List<IValue<T>> _values;
@@ -321,10 +314,10 @@ public class MemoryValueRepository<T>
 
     public IValue<T> this[int index] => _values[index];
 
-    public MemoryValueRepository<T> Add(IValue<T> value)
+    public int Add(IValue<T> value)
     {
         _values.Add(value);
-        return this;
+        return _values.Count - 1;
     }
 
     public MemoryValueRepository<T> Remove(IValue<T> value)

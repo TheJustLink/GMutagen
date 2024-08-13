@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Numerics;
 
+using GMutagen.v3;
+
 namespace GMutagen.v4;
 
 class Test
@@ -18,7 +20,7 @@ class Test
         // player
         // IPosition // IRead // IWrite
 
-        ObjectDesc desc = new ObjectDesc();
+        //ObjectDesc desc = new ObjectDesc();
 
         //IRepository<object> objects; // IDictionary<int, T> where T : IList<int>
 
@@ -85,26 +87,26 @@ class Test
         // position.Set(0, "position"); // Id ?
 
 
-        var objects = new Repo<int, object>();
-        
-        var positionsRepo = new Repo<int, Vector3>();
-        objects[0] = positionsRepo;
-
-        var playerObj = new Repo<Type, ContractDesc>();
-        playerObj[typeof(Position)] = new ContractDesc(0, 0);
-        playerObj[typeof(PreviousPosition)] = new ContractDesc(0, 1);
-        objects[1] = playerObj;
+        // var objects = new Repo<int, object>();
+        //
+        // var positionsRepo = new Repo<int, Vector3>();
+        // objects[0] = positionsRepo;
+        //
+        // var playerObj = new Repo<Type, ContractDesc>();
+        // playerObj[typeof(Position)] = new ContractDesc(0, 0);
+        // playerObj[typeof(PreviousPosition)] = new ContractDesc(0, 1);
+        // objects[1] = playerObj;
 
         // Set player previous position
-        var playerObjTest = objects[1] as IRepo<Type, ContractDesc>;
-        var playerPreviousPosition = playerObjTest[typeof(PreviousPosition)];
-        var positionsRepoTest = objects[playerPreviousPosition.Id] as IRepo<int, Vector3>;
-        positionsRepoTest[playerPreviousPosition.ValueId] = new Vector3(1, 2, 3);
+        //var playerObjTest = objects[1] as IRepo<Type, ContractDesc>;
+        //var playerPreviousPosition = playerObjTest[typeof(PreviousPosition)];
+        //var positionsRepoTest = objects[playerPreviousPosition.Id] as IRepo<int, Vector3>;
+        //positionsRepoTest[playerPreviousPosition.ValueId] = new Vector3(1, 2, 3);
 
         // Swap current player position and previous
-        var playerCurrentPosition = playerObjTest[typeof(Position)];
-        playerObjTest[typeof(Position)] = playerObjTest[typeof(PreviousPosition)];
-        playerObjTest[typeof(PreviousPosition)] = playerCurrentPosition;
+        //var playerCurrentPosition = playerObjTest[typeof(Position)];
+        //playerObjTest[typeof(Position)] = playerObjTest[typeof(PreviousPosition)];
+        //playerObjTest[typeof(PreviousPosition)] = playerCurrentPosition;
 
 
         // ЛУЧШЕ НЕ СОВМЕЩАТЬ (ЗАЧЕМ?)
@@ -114,11 +116,11 @@ class Test
         // ContractsRepo : IRepo<contractId, IRepo<valueId, value>>
 
         // ContractDesc { contractId, valueId }
-        var objects2 = new Repo<int, IRepo<Type, ContractDesc>>();
-        var contracts2 = new Repo<int, object>();
+        //var objects2 = new Repo<int, IRepo<Type, ContractDesc>>();
+        //var contracts2 = new Repo<int, object>();
 
-        var objects3 = new Repo<int, IRepo<Type, int>>();
-        var contracts3 = new Repo<Type, object>();
+        //var objects3 = new Repo<int, IRepo<Type, int>>();
+        //var contracts3 = new Repo<Type, object>();
 
         // var objects3 = new Repo<objectId, IRepo<contractId:Type, valueId>>();
         // var contracts3 = new Repo<contractType:Type, IRepo<valueId, value>>();
@@ -144,26 +146,137 @@ class Test
         // positions[2] = new Vector3(); // previous position
         // 
 
+        // var objects4 = new Repo<int, Repo<Type, int>>();
+        // var contracts4 = new Repo<Type, object>();
+
+        // ContractDesc { contractType, valueId }
+        // // var objects3 = new Repo<objectId, ContractDesc>();
+        // // var contracts3 = new Repo<contractType:Type, IRepo<valueId, value>>();
+
+        // var objects5 = new Repo<int, Repo<Type, object>>();
+
+
+        // // var objects3 = new Repo<objectId, Dictionary<Type, IRepo<valueId, value>>>();
+        // // var contracts3 = new Repo<contractType:Type, IRepo<valueId, value>>();
+
+        var objects = new Repo<int, IRepo<Type, object>>();
+        var objectCreator = new ObjectCreator(objects, new ObjectRepoInMemoryFactory());
+
+        var playerTemplate = new ObjectTemplate();
+        playerTemplate.Add<IPosition>(new DefaultPosition());
+
+        
     }
 }
 
-public enum Position;
-public enum PreviousPosition;
-public struct ContractDesc
+public class ObjectRepoInMemoryFactory : IFactory<IRepo<Type, object>>
 {
-    public int Id;
-    public int ValueId;
+    public IRepo<Type, object> Create()
+    {
+        return new Repo<Type, object>();
+    }
+}
+public class DefaultPosition : IPosition { }
+public interface IPosition { }
 
-    public ContractDesc(int id, int valueId)
+public readonly struct Object
+{
+    public readonly int Id;
+
+    private readonly IRepo<int, IRepo<Type, object>> _objects;
+
+    public Object(int id, IRepo<int, IRepo<Type, object>> objects)
     {
         Id = id;
-        ValueId = valueId;
+        _objects = objects;
+    }
+
+    public bool TryGet<T>(out T contract)
+    {
+        var success = _objects[Id].TryGet(typeof(T), out var value);
+        contract = (T)value;
+        return success;
+    }
+    public T Get<T>()
+    {
+        return (T)_objects[Id][typeof(T)];
+    }
+
+    public void Set<T>(T value)
+    {
+        _objects[Id][typeof(T)] = value;
     }
 }
+public class ObjectTemplate
+{
+    public readonly Dictionary<Type, object> Contracts = new();
+
+    public IRepo<Type, object> ToRepo() 
+    {
+        return new Repo<Type, object>(Contracts);
+    }
+
+    public void AddEmpty<T>()
+    {
+        Contracts.Add(typeof(T), new EmptyContract());
+    }
+    public void Add<T>(T value)
+    {
+        Contracts.Add(typeof(T), value);
+    }
+
+    public void Set<T>(T value)
+    {
+        Contracts[typeof(T)] = value;
+    }
+}
+
+public class EmptyContract { }
+
+public class ObjectCreator
+{
+    private static int s_Id;
+    private readonly IRepo<int, IRepo<Type, object>> _objects;
+    private readonly IFactory<IRepo<Type, object>> _objectRepoFactory;
+
+    public ObjectCreator(IRepo<int, IRepo<Type, object>> objects, IFactory<IRepo<Type, object>> objectRepoFactory)
+    {
+        _objects = objects;
+        _objectRepoFactory = objectRepoFactory;
+    }
+
+    public Object Create(ObjectTemplate template)
+    {
+        var id = s_Id++;
+        var objectRepo = _objectRepoFactory.Create();
+        _objects[id] = objectRepo;
+
+        foreach (var contract in template.Contracts)
+            objectRepo[contract.Key] = contract.Value.Clone();
+
+        return new Object(id, _objects);
+    }
+}
+public interface IFactory<out T>
+{
+    T Create();
+}
+
+
 public class Repo<TId, TValue> : IRepo<TId, TValue>
 {
-    private readonly Dictionary<TId, TValue> _memory = new();
+    private readonly Dictionary<TId, TValue> _memory;
 
+    public Repo() : this(new Dictionary<TId, TValue>())
+    {
+    }
+
+    public Repo(Dictionary<TId, TValue> memory) 
+    {
+        _memory = memory;
+    }
+
+    public bool TryGet(TId id, out TValue value) => _memory.TryGetValue(id, out value);
     public TValue Get(TId id) => _memory[id];
     public void Set(TId id, TValue value) => _memory[id] = value;
 
@@ -175,45 +288,189 @@ public class Repo<TId, TValue> : IRepo<TId, TValue>
 }
 public interface IRepo<in TId, TValue>
 {
+    bool TryGet(TId id, out TValue value);
     TValue Get(TId id) => this[id];
     void Set(TId id, TValue value) => this[id] = value;
 
     TValue this[TId id] { get; set; }
 }
 
-public interface IRepository<T> : IRepositoryReader<T>, IRepositoryWriter<T>
+public interface IValue<T>
 {
-    T Get(int id) => this[id];
-    void Set(int id, T value) => this[id] = value;
-
-    T this[int id] { get; set; }
-}
-public interface IRepositoryReader<out T>
-{
-    T Get(int id);
-}
-public interface IRepositoryWriter<in T>
-{
-    void Set(int id, T value);
+    T Value { get; set; }
 }
 
-
-public readonly struct ObjectDesc
+public class ValueUtil
 {
-    public readonly int Id;
-
-    public ObjectDesc() 
-    { 
-
-    }
-
-    public ObjectDesc(int id)
+    private static Dictionary<Type, ICloneable> _typeMap = new Dictionary<Type, ICloneable>
     {
-        Id = id;
+        { typeof(Vector2), new Vector2Value() },
+    };
+
+    public ValueUtil()
+    {
+    }
+
+    public ValueUtil(Dictionary<Type, ICloneable> typeMap)
+    {
+        _typeMap = typeMap;
+    }
+
+    public static IValue<T> GetValue<T>()
+    {
+        var obj = _typeMap[typeof(T)];
+        return (IValue<T>)obj.Clone();
     }
 }
 
-public readonly struct LocalObjectDesc
+public class ValueFromRepository<T> : IValue<T>
 {
-    public readonly Dictionary<Type, object> _map;
+    protected int Index;
+    protected readonly MemoryValueRepository<T> Repository;
+
+    public ValueFromRepository(MemoryValueRepository<T> repository)
+    {
+        Repository = repository;
+        var value = ValueUtil.GetValue<T>();
+        Repository.Add(value);
+        Index = Repository.IndexOf(value);
+    }
+
+    public ValueFromRepository(MemoryValueRepository<T> repository, int index)
+    {
+        Repository = repository;
+        Index = index;
+    }
+
+    public MemoryValueRepository<T> GetRepository()
+    {
+        return Repository;
+    }
+
+    public int GetIndex()
+    {
+        return Index;
+    }
+
+    public void SetOtherIndex(int index)
+    {
+        Index = index;
+    }
+
+    public void SetOtherIndex(IValue<T> obj)
+    {
+        Index = Repository.IndexOf(obj);
+    }
+
+    public T Value
+    {
+        get => Repository[Index].Value;
+        set => Repository[Index].Value = value;
+    }
+}
+
+public class Vector2Value : IValue<Vector2>, ICloneable
+{
+    public Vector2 Value { get; set; }
+
+    public object Clone()
+    {
+        return new Vector2Value();
+    }
+}
+
+public class DirectValueFromRepository<T> : ValueFromRepository<T>
+{
+    private int _index;
+    private readonly MemoryValueRepository<T> _repository;
+    private IValue<T> _directValue;
+
+    public DirectValueFromRepository(MemoryValueRepository<T> repository, int index) : base(repository, index)
+    {
+        _repository = repository;
+        _index = index;
+        _directValue = GetDirectValue(repository, index);
+    }
+
+    public DirectValueFromRepository(MemoryValueRepository<T> repository, int index, IValue<T> directValue) : base(
+        repository,
+        index)
+    {
+        _repository = repository;
+        _index = index;
+        _directValue = directValue;
+    }
+
+    private IValue<T> GetDirectValue(MemoryValueRepository<T> repository, int index)
+    {
+        var value = repository[index];
+        while (value is ValueFromRepository<T> valueFromRepository)
+        {
+            index = valueFromRepository.GetIndex();
+            repository = valueFromRepository.GetRepository();
+            value = repository[index];
+        }
+
+        return value;
+    }
+
+    public void SetOtherIndex(int index)
+    {
+        _index = index;
+        _directValue = GetDirectValue(_repository, _index);
+    }
+
+    public void SetOtherIndex(IValue<T> value)
+    {
+        _index = _repository.IndexOf(value);
+        _directValue = GetDirectValue(_repository, _index);
+    }
+
+    public T Value
+    {
+        get => _directValue.Value;
+        set => _directValue.Value = value;
+    }
+}
+
+
+public class MemoryValueRepository<T>
+{
+    private readonly List<IValue<T>> _values;
+
+    public MemoryValueRepository()
+    {
+        _values = new List<IValue<T>>();
+    }
+
+    public MemoryValueRepository(List<IValue<T>> values)
+    {
+        _values = values;
+    }
+
+    public IValue<T> this[int index] => _values[index];
+
+    public MemoryValueRepository<T> Add(IValue<T> value)
+    {
+        _values.Add(value);
+        return this;
+    }
+
+    public MemoryValueRepository<T> Remove(IValue<T> value)
+    {
+        _values.Remove(value);
+        return this;
+    }
+
+    public int IndexOf(IValue<T> targetValue)
+    {
+        for (int i = 0; i < _values.Count; i++)
+        {
+            var value = _values[i];
+            if (object.ReferenceEquals(value, targetValue))
+                return i;
+        }
+
+        throw new ArgumentException("Value is not represent in repository " + targetValue);
+    }
 }
