@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Reflection;
 
 namespace GMutagen.v5;
 
@@ -14,18 +15,32 @@ class Test
 
     private static void Game<TId>(IGenerator<TId> idGenerator)
     {
-        IReadWrite<TId, Vector2> positions = new MemoryValues<TId, Vector2>();
-        var positionGenerator = new ExternalValueGenerator<TId, Vector2>(idGenerator, positions);
+        var positionGenerator = GetDefaultPositionGenerator(idGenerator);
 
         var playerTemplate = new ObjectTemplate();
         playerTemplate.AddEmpty<IPosition>();
 
         var player = playerTemplate.Create();
+        player.Set<IPosition>(positionGenerator.Generate());
+    }
+    public static IGenerator<IPosition> GetDefaultPositionGenerator<TId>(IGenerator<TId> idGenerator)
+    {
+        IReadWrite<TId, Vector2> positions = new MemoryRepository<TId, Vector2>();
+        IGenerator<IValue<Vector2>> positionValueGenerator = new ExternalValueGenerator<TId, Vector2>(idGenerator, positions);
+        IGenerator<IValue<Vector2>> lazyPositionValueGenerator = new GeneratorDecorator<IValue<Vector2>>(positionValueGenerator, new LazyValueGenerator<Vector2>());
 
-        var playerPosition = new LazyValue<Vector2>(positionGenerator);
-        var playerPrevPosition = positionGenerator.Generate();
+        ITypeReadWrite<IGenerator<object>> valueGenerators = new TypeRepository<IGenerator<object>>(); // fix it pls later pls pls pls
+        valueGenerators.Write(lazyPositionValueGenerator);
 
-        player.Set<IPosition>(new DefaultPosition(playerPosition, playerPrevPosition));
+        ITypeRead<IGenerator<object>> universalGenerator = valueGenerators;
+
+        var positionGenerator = CreateContractGenerator<IPosition>(universalGenerator, new DefaultPositionGenerator());
+        return positionGenerator;
+    }
+    public static IGenerator<TContract> CreateContractGenerator<TContract>(ITypeRead<IGenerator<object>> universalGenerator, IGenerator<TContract, ITypeRead<IGenerator<object>>> contractGenerator)
+    {
+
+        // return new GeneratorCache<TContract>(universalGenerator, contractGenerator);
     }
 }
 
@@ -54,6 +69,69 @@ public interface IPosition
     Vector2 GetCurrentPositionWithOffset(Vector2 offset);
     Vector2 GetPreviousPositionWithOffset(Vector2 offset);
 }
+public class ValueWithHistory<T> : IValue<T>
+{
+    private readonly IValue<T> _source;
+    private T _previousValue;
+
+    public ValueWithHistory(IValue<T> source, bool preInit = false)
+    {
+        _source = source;
+
+        if (preInit)
+            _previousValue = source.Value;
+    }
+
+    public T Value
+    {
+        get => _previousValue;
+        set
+        {
+            _previousValue = _source.Value;
+            _source.Value = value;
+        }
+    }
+}
+public class DefaultPositionGenerator : IGenerator<IPosition, ITypeRead<IGenerator<object>>>
+{
+    public IPosition Generate(ITypeRead<IGenerator<object>> input)
+    {
+        var currentPosition = input.Read<IGenerator<IValue<Vector2>>>().Generate();
+        var previousPosition = new ValueWithHistory<Vector2>(currentPosition);
+
+        return new DefaultPosition(currentPosition, previousPosition);
+    }
+
+    public IPosition this[ITypeRead<IGenerator<object>> id] => Read(id);
+    public IPosition Read(ITypeRead<IGenerator<object>> id) => Generate(id);
+}
+
+public class LazyValueGenerator<T> : IGenerator<LazyValue<T>, IGenerator<IValue<T>>>
+{
+    public LazyValue<T> Generate(IGenerator<IValue<T>> generator) => new(generator);
+
+    public LazyValue<T> this[IGenerator<IValue<T>> id] => Read(id);
+    public LazyValue<T> Read(IGenerator<IValue<T>> id) => Generate(id);
+}
+
+public class GeneratorDecorator<T> : GeneratorDecorator<T, T>
+{
+    public GeneratorDecorator(IGenerator<T> sourceGenerator, IGenerator<T, IGenerator<T>> proxyGenerator)
+        : base(sourceGenerator, proxyGenerator) { }
+}
+public class GeneratorDecorator<TIn, TOut> : IGenerator<TOut>
+{
+    private readonly IGenerator<TIn> _sourceGenerator;
+    private readonly IGenerator<TOut, IGenerator<TIn>> _proxyGenerator;
+
+    public GeneratorDecorator(IGenerator<TIn> sourceGenerator, IGenerator<TOut, IGenerator<TIn>> proxyGenerator)
+    {
+        _sourceGenerator = sourceGenerator;
+        _proxyGenerator = proxyGenerator;
+    }
+
+    public TOut Generate() => _proxyGenerator.Generate(_sourceGenerator);
+}
 
 public class LazyValue<T> : IValue<T>
 {
@@ -71,6 +149,7 @@ public class LazyValue<T> : IValue<T>
         set => (_cachedValue ??= _valueGenerator.Generate()).Value = value;
     }
 }
+
 public class ExternalValueGenerator<TId, TValue> : IGenerator<IValue<TValue>>
 {
     private readonly IGenerator<TId> _idGenerator;
@@ -106,12 +185,27 @@ public class IncrementalGenerator<T> : IValue<T>, IGenerator<T> where T : IAddit
         return id;
     }
 }
+public interface IGenerator<out TOut, in TIn> : IRead<TIn, TOut>
+{
+    TOut Generate(TIn input);
+}
 public interface IGenerator<out T>
 {
     T Generate();
 }
+public class TypeRepository<TValue> : MemoryRepository<Type, TValue>, ITypeReadWrite<TValue> where TValue : class
+{
+    public T Read<T>() where T : class
+    {
+        return Read(typeof(T)) as T;
+    }
+    public void Write<T>(T value)
+    {
+        Write(typeof(T), value as TValue);
+    }
+}
 
-public class MemoryValues<TId, TValue> : IReadWrite<TId, TValue> where TId : notnull
+public class MemoryRepository<TId, TValue> : IReadWrite<TId, TValue> where TId : notnull
 {
     private readonly Dictionary<TId, TValue> _memory = new();
 
@@ -131,7 +225,19 @@ public class MemoryValues<TId, TValue> : IReadWrite<TId, TValue> where TId : not
     }
 }
 
-public interface IReadWrite<in TId, TValue> : IRead<TId, TValue>, IWrite<TId, TValue> { }
+public interface ITypeReadWrite<out TValue> : ITypeRead<TValue>, ITypeWrite<TValue> { }
+public interface ITypeWrite<out TValue> : IRead<Type, TValue>
+{
+    void Write<T>(T value);
+}
+public interface ITypeRead<out TValue> : IRead<Type, TValue>
+{
+    T Read<T>() where T : class;
+}
+public interface IReadWrite<in TId, TValue> : IRead<TId, TValue>, IWrite<TId, TValue>
+{
+    TValue this[TId id] { get; set; }
+}
 public interface IRead<in TId, out TValue>
 {
     TValue this[TId id] { get; }
@@ -180,10 +286,11 @@ public class ExternalValue<TId, TValue> : IValue<TValue>
         set => _writer.Write(_id, value);
     }
 }
-public interface IValue<T>
+public interface IValue<T> : IValue
 {
     T Value { get; set; }
 }
+public interface IValue { }
 
 
 public class Object
@@ -206,17 +313,56 @@ public class Object
 }
 public class ObjectTemplate
 {
+    private static Dictionary<Type, IGenerator<object>> _contractGenerators = new();
+
     private readonly Dictionary<Type, object> _contracts = new();
 
     public Object Create()
     {
-        return new Object(_contracts);
+        var instanceContracts = new Dictionary<Type, object>();
+
+        foreach (var pair in _contracts)
+        {
+            if(pair.Value is IGenerator<object> clonable)
+            {
+                instanceContracts.Add(pair.Key, clonable.Generate());
+            }
+            else if (pair.Value is IFromReflection)
+            {
+                var type = pair.Value.GetType();
+                var instance = Activator.CreateInstance(type);
+                var fields = type.GetFields();
+                foreach (var field in fields)
+                {
+                    if (field.FieldType is IValue)
+                        field.SetValue(instance, GetValueFor(field));
+                }
+                instanceContracts.Add(pair.Key, );
+
+            }
+            else instanceContracts.Add(pair.Key, pair.Value);
+        }
+
+        return new Object(instanceContracts);
     }
 
+    private IValue GetValueFor(FieldInfo field)
+    {
+        field.
+    }
+    //Dictionary<SomeData, IGenerator<object>>
     public void AddEmpty<T>()
     {
         _contracts.Add(typeof(T), new EmptyContract());
     }
+    public void Add<TContract, TValue>(IGenerator<TContract, IGenerator<IValue<TValue>>> contractGenerator)
+    {
+        var valueGenerator = DefaultGenerators.GetValueGenerator<TValue>();
+        var contract = contractGenerator.Generate(valueGenerator);
+
+        Add<TContract>(contract);
+    }
+
     public void Add<T>(T value)
     {
         _contracts.Add(typeof(T), value);
@@ -226,6 +372,12 @@ public class ObjectTemplate
     {
         _contracts[typeof(T)] = value;
     }
+
 }
 
-public class EmptyContract { }
+internal interface IFromReflection
+{
+    
+}
+
+public class EmptyContract{ }
