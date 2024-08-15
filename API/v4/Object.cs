@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Numerics;
 
-using GMutagen.v3;
-
 namespace GMutagen.v4;
 
 class Test
