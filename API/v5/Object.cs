@@ -20,7 +20,7 @@ class Test
         playerTemplate.AddEmpty<IPosition>();
 
         var player = playerTemplate.Create();
-        player.Set<IPosition>(positionGenerator.Generate());
+        //player.Set<IPosition>(positionGenerator.Generate());
     }
     public static IGenerator<IPosition> GetDefaultPositionGenerator<TId>(IGenerator<TId> idGenerator)
     {
@@ -38,8 +38,8 @@ class Test
     }
     public static IGenerator<TContract> CreateContractGenerator<TContract>(ITypeRead<IGenerator<object>> universalGenerator, IGenerator<TContract, ITypeRead<IGenerator<object>>> contractGenerator)
     {
-
         // return new GeneratorCache<TContract>(universalGenerator, contractGenerator);
+        return null;
     }
 }
 
@@ -178,6 +178,15 @@ public class GuidGenerator : IGenerator<Guid>
 
 public class IncrementalGenerator<T> : IValue<T>, IGenerator<T> where T : IAdditionOperators<T, int, T>
 {
+    public IncrementalGenerator() : this(default(T))
+    {
+    }
+
+    public IncrementalGenerator(T value)
+    {
+        Value = value;
+    }
+
     public T Value { get; set; }
 
     public T Generate()
@@ -212,7 +221,16 @@ public class TypeRepository<TValue> : MemoryRepository<Type, TValue>, ITypeReadW
 
 public class MemoryRepository<TId, TValue> : IReadWrite<TId, TValue> where TId : notnull
 {
-    private readonly Dictionary<TId, TValue> _memory = new();
+    private readonly Dictionary<TId, TValue> _memory;
+
+    public MemoryRepository() : this(new Dictionary<TId, TValue>())
+    {
+    }
+
+    public MemoryRepository(Dictionary<TId, TValue> memory)
+    {
+        _memory = memory;
+    }
 
     public TValue this[TId id]
     {

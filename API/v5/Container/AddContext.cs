@@ -5,7 +5,7 @@ namespace GMutagen.v5;
 public interface IAddContext
 {
     IAddAsContext As<T>();
-    IContainer FromInstance(object instance, bool registerAllContracts = false);
+    IContainer FromInstance(object instance, bool registerAllContracts = false, bool shouldOverride = false);
 }
 
 public class AddContext : ContainerContext, IAddContext
@@ -26,7 +26,7 @@ public class AddContext : ContainerContext, IAddContext
         return _addAsContext;
     }
 
-    public IContainer FromInstance(object instance, bool registerAllContracts = false)
+    public IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true)
     {
         var instanceType = instance.GetType();
 
@@ -41,13 +41,16 @@ public class AddContext : ContainerContext, IAddContext
 
         foreach (var interfaceType in instanceType.GetInterfaces())
         {
-            Container.Dictionary.TryAdd(interfaceType, instance);
+            if(!Container.Dictionary.TryAdd(interfaceType, instance) && shouldOverride);
+                Container[interfaceType] = instance;
         }
 
         var baseType = instanceType.BaseType;
         while (baseType != typeof(object))
         {
-            Container.Dictionary.TryAdd(baseType, instance);
+            if (!Container.Dictionary.TryAdd(baseType, instance) && shouldOverride)
+                Container[baseType] = instance;
+
             baseType = instanceType.BaseType;
         }
 

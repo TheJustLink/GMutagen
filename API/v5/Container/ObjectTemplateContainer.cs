@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Reflection;
 
 namespace GMutagen.v5;
@@ -16,7 +17,7 @@ public class ObjectTemplateContainer : IContainer
     public readonly Dictionary<Type, object> Dictionary;
 
     private readonly AddContext _addContext;
-    public Dictionary<Type, Dictionary<int, IGenerator<object>>> TypeMap;
+    public GeneratorsMap GeneratorsMap;
 
     public ObjectTemplateContainer()
     {
@@ -78,9 +79,8 @@ public class ObjectTemplateContainer : IContainer
             if (attribute is not IdAttribute id)
                 continue;
 
-            if (TypeMap == null ||
-                !TypeMap.TryGetValue(instanceType, out var idMap) ||
-                !idMap.TryGetValue(id.Id, out var generator))
+            if (GeneratorsMap == null ||
+                !GeneratorsMap.TryGetGenerator(instanceType, id.Id, field, out var generator))
                 return false;
 
             field.SetValue(instance, generator.Generate());
@@ -95,5 +95,84 @@ public class ObjectTemplateContainer : IContainer
     {
         get => Dictionary[key];
         set => Dictionary[key] = value;
+    }
+}
+
+public class GeneratorsMap
+{
+    private readonly Dictionary<Type, Dictionary<int, IGenerator<object>>> _map;
+
+    private Type _targetType;
+
+    public GeneratorsMap()
+    {
+        _map = new Dictionary<Type, Dictionary<int, IGenerator<object>>>();
+    }
+
+    public GeneratorsMap SetTargetType(Type targetType)
+    {
+        _targetType = targetType;
+        return this;
+    }
+
+    public GeneratorsMap Add(int id, IGenerator<object> generator)
+    {
+        if (_map.TryGetValue(_targetType, out var idMap))
+            idMap.Add(id, generator);
+        else
+            _map.Add(_targetType, new Dictionary<int, IGenerator<object>> { { id, generator } });
+
+        return this;
+    }
+
+    public GeneratorsMap AddDefault<TValue>(int id)
+    {
+        var generator = DefaultGenerators.GetExternalValueGenerator(typeof(TValue));
+
+        if (_map.TryGetValue(_targetType, out var idMap))
+            idMap.Add(id, generator);
+        else
+            _map.Add(_targetType, new Dictionary<int, IGenerator<object>> { { id, generator } });
+
+        return this;
+    }
+
+    public bool TryGetGenerator(Type instanceType, int id, FieldInfo field, out IGenerator<object> generator)
+    {
+        if (_map.TryGetValue(instanceType, out var idMap))
+            return idMap.TryGetValue(id, out generator);
+
+        if (typeof(IValue).IsAssignableFrom(field.FieldType))
+        {
+            generator = DefaultGenerators.GetExternalValueGenerator(field.FieldType.GenericTypeArguments[0]);
+            return true;
+        }
+
+        generator = null!;
+        return false;
+    }
+}
+
+public static class DefaultGenerators
+{
+    public static Type DefaultIdType = typeof(int);
+    public static Type[] DefaultValueTypes = new[] { typeof(Vector2) };
+
+    public static IGenerator<object> GetExternalValueGenerator(Type targetType)
+    {
+        return GetExternalValueGenerator(targetType, DefaultIdType);
+    }
+
+    public static IGenerator<object> GetExternalValueGenerator(Type targetType, Type idType)
+    {
+        var mapObj = Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(idType, targetType));
+        var memoryObj =
+            Activator.CreateInstance(typeof(MemoryRepository<,>).MakeGenericType(idType, targetType), mapObj);
+        var idGeneratorObj = Activator.CreateInstance(typeof(IncrementalGenerator<>).MakeGenericType(idType));
+        var generatorObj =
+            Activator.CreateInstance(typeof(ExternalValueGenerator<,>).MakeGenericType(idType, targetType),
+                idGeneratorObj, memoryObj);
+        var generator = (IGenerator<object>)generatorObj!;
+        return generator;
     }
 }
