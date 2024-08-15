@@ -1,3 +1,5 @@
 ﻿namespace GMutagen;
 
-public class EmptyContract;
+public class EmptyContract
+{
+}

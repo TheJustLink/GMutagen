@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Reflection;
 
 namespace GMutagen.v5;
 
@@ -48,6 +47,10 @@ public class DefaultPosition : IPosition
 {
     private readonly IValue<Vector2> _currentPosition;
     private readonly IValue<Vector2> _previousPosition;
+
+    public DefaultPosition()
+    {
+    }
 
     public DefaultPosition(IValue<Vector2> currentPosition, IValue<Vector2> previousPosition)
     {
@@ -172,6 +175,7 @@ public class GuidGenerator : IGenerator<Guid>
 {
     public Guid Generate() => Guid.NewGuid();
 }
+
 public class IncrementalGenerator<T> : IValue<T>, IGenerator<T> where T : IAdditionOperators<T, int, T>
 {
     public T Value { get; set; }
@@ -199,6 +203,7 @@ public class TypeRepository<TValue> : MemoryRepository<Type, TValue>, ITypeReadW
     {
         return Read(typeof(T)) as T;
     }
+
     public void Write<T>(T value)
     {
         Write(typeof(T), value as TValue);
@@ -225,24 +230,31 @@ public class MemoryRepository<TId, TValue> : IReadWrite<TId, TValue> where TId :
     }
 }
 
-public interface ITypeReadWrite<out TValue> : ITypeRead<TValue>, ITypeWrite<TValue> { }
+public interface ITypeReadWrite<out TValue> : ITypeRead<TValue>, ITypeWrite<TValue>
+{
+}
+
 public interface ITypeWrite<out TValue> : IRead<Type, TValue>
 {
     void Write<T>(T value);
 }
+
 public interface ITypeRead<out TValue> : IRead<Type, TValue>
 {
     T Read<T>() where T : class;
 }
+
 public interface IReadWrite<in TId, TValue> : IRead<TId, TValue>, IWrite<TId, TValue>
 {
     TValue this[TId id] { get; set; }
 }
+
 public interface IRead<in TId, out TValue>
 {
     TValue this[TId id] { get; }
     TValue Read(TId id);
 }
+
 public interface IWrite<in TId, in TValue>
 {
     TValue this[TId id] { set; }
@@ -251,15 +263,18 @@ public interface IWrite<in TId, in TValue>
 
 public static class ReadWriteExtensions
 {
-    public static ExternalValue<TId, TValue> Instantiate<TId, TValue>(this IReadWrite<TId, TValue> readWrite, IGenerator<TId> idGenerator)
+    public static ExternalValue<TId, TValue> Instantiate<TId, TValue>(this IReadWrite<TId, TValue> readWrite,
+        IGenerator<TId> idGenerator)
     {
         return new ExternalValue<TId, TValue>(idGenerator.Generate(), readWrite);
     }
+
     public static ExternalValue<TId, TValue> GetInstance<TId, TValue>(this IReadWrite<TId, TValue> readWrite, TId id)
     {
         return new ExternalValue<TId, TValue>(id, readWrite);
     }
 }
+
 public class ExternalValue<TId, TValue> : IValue<TValue>
 {
     private readonly TId _id;
@@ -286,16 +301,19 @@ public class ExternalValue<TId, TValue> : IValue<TValue>
         set => _writer.Write(_id, value);
     }
 }
+
 public interface IValue<T> : IValue
 {
     T Value { get; set; }
 }
-public interface IValue { }
 
+public interface IValue
+{
+}
 
 public class Object
 {
-    private Dictionary<Type, object> _contracts;
+    private readonly Dictionary<Type, object> _contracts;
 
     public Object(Dictionary<Type, object> contracts)
     {
@@ -306,78 +324,23 @@ public class Object
     {
         return (T)_contracts[typeof(T)];
     }
-    public void Set<T>(T value)
-    {
-        _contracts[typeof(T)] = value;
-    }
-}
-public class ObjectTemplate
-{
-    private static Dictionary<Type, IGenerator<object>> _contractGenerators = new();
-
-    private readonly Dictionary<Type, object> _contracts = new();
-
-    public Object Create()
-    {
-        var instanceContracts = new Dictionary<Type, object>();
-
-        foreach (var pair in _contracts)
-        {
-            if(pair.Value is IGenerator<object> clonable)
-            {
-                instanceContracts.Add(pair.Key, clonable.Generate());
-            }
-            else if (pair.Value is IFromReflection)
-            {
-                var type = pair.Value.GetType();
-                var instance = Activator.CreateInstance(type);
-                var fields = type.GetFields();
-                foreach (var field in fields)
-                {
-                    if (field.FieldType is IValue)
-                        field.SetValue(instance, GetValueFor(field));
-                }
-                instanceContracts.Add(pair.Key, );
-
-            }
-            else instanceContracts.Add(pair.Key, pair.Value);
-        }
-
-        return new Object(instanceContracts);
-    }
-
-    private IValue GetValueFor(FieldInfo field)
-    {
-        field.
-    }
-    //Dictionary<SomeData, IGenerator<object>>
-    public void AddEmpty<T>()
-    {
-        _contracts.Add(typeof(T), new EmptyContract());
-    }
-    public void Add<TContract, TValue>(IGenerator<TContract, IGenerator<IValue<TValue>>> contractGenerator)
-    {
-        var valueGenerator = DefaultGenerators.GetValueGenerator<TValue>();
-        var contract = contractGenerator.Generate(valueGenerator);
-
-        Add<TContract>(contract);
-    }
-
-    public void Add<T>(T value)
-    {
-        _contracts.Add(typeof(T), value);
-    }
-
-    public void Set<T>(T value)
-    {
-        _contracts[typeof(T)] = value;
-    }
-
 }
 
 internal interface IFromReflection
 {
-    
 }
 
-public class EmptyContract{ }
+[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
+public class IdAttribute : Attribute
+{
+    public int Id;
+
+    public IdAttribute(int id)
+    {
+        Id = id;
+    }
+}
+
+public class EmptyContract
+{
+}

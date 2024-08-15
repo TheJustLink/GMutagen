@@ -19,9 +19,17 @@ class Test
     }
 }
 
-interface INextPosition : IPosition;
-interface IPosition : IRepository<string>;
-class DefaultPosition : MemoryRepository<string>, IPosition;
+interface INextPosition : IPosition
+{
+}
+
+interface IPosition : IRepository<string>
+{
+}
+
+class DefaultPosition : MemoryRepository<string>, IPosition
+{
+}
 
 public abstract class Repository<T> : IRepository<T>
 {
@@ -54,7 +62,9 @@ public class MemoryRepository<T> : Repository<T>
     public override void Set(int id, T value) => _memory[id] = value;
 }
 
-public class EmptyContract;
+public class EmptyContract
+{
+}
 
 public readonly struct Object
 {
