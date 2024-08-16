@@ -59,6 +59,6 @@ public class AddContext : ContainerContext, IAddContext
 
     private bool TypeCanBeConvertedTo(Type instanceType, Type targetType)
     {
-        return !instanceType.IsSubclassOf(targetType) && !targetType.IsAssignableFrom(instanceType);
+        return instanceType.IsSubclassOf(targetType) || targetType.IsAssignableFrom(instanceType);
     }
 }

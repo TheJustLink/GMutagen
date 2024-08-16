@@ -45,6 +45,7 @@ class Test
 
 public class DefaultPosition : IPosition
 {
+    [Id(1)]
     private readonly IValue<Vector2> _currentPosition;
     private readonly IValue<Vector2> _previousPosition;
 
@@ -299,11 +300,9 @@ public class ExternalValue<TId, TValue> : IValue<TValue>
     private readonly IRead<TId, TValue> _reader;
     private readonly IWrite<TId, TValue> _writer;
 
-    public ExternalValue(TId id, IReadWrite<TId, TValue> readWrite)
+    public ExternalValue(TId id, IReadWrite<TId, TValue> readWrite) : this(id, readWrite, readWrite)
     {
-        _id = id;
-        _reader = readWrite;
-        _writer = readWrite;
+       
     }
 
     public ExternalValue(TId id, IRead<TId, TValue> reader, IWrite<TId, TValue> writer)
@@ -311,6 +310,7 @@ public class ExternalValue<TId, TValue> : IValue<TValue>
         _id = id;
         _reader = reader;
         _writer = writer;
+        _writer.Write(id, default(TValue));
     }
 
     public TValue Value

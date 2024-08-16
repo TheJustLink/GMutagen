@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
 using System.Reflection;
 
 namespace GMutagen.v5;
@@ -23,6 +22,7 @@ public class ObjectTemplateContainer : IContainer
     {
         Dictionary = new Dictionary<Type, object>();
         _addContext = new AddContext(this);
+        GeneratorsMap = new GeneratorsMap();
     }
 
     public IAddContext Add<T>()
@@ -41,7 +41,7 @@ public class ObjectTemplateContainer : IContainer
 
     private bool ValueExist(Type type, out object obj)
     {
-        return Dictionary.TryGetValue(type, out obj) && obj == null;
+        return Dictionary.TryGetValue(type, out obj) && obj != null;
     }
 
     private bool ContainsInstance(object obj)
@@ -57,11 +57,11 @@ public class ObjectTemplateContainer : IContainer
         if (ContainsInstance(obj))
             return Dictionary[targetType];
 
-        var objType = obj.GetType();
+        var objType = (Type)obj;
         var instance = Activator.CreateInstance(objType)!;
         foreach (var field in objType.GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
         {
-            if (TryInitFromGenerators(obj, objType, field))
+            if (TryInitFromGenerators(instance, objType, field))
                 continue;
 
             var fieldType = field.FieldType;
@@ -74,17 +74,27 @@ public class ObjectTemplateContainer : IContainer
 
     private bool TryInitFromGenerators(object instance, Type instanceType, FieldInfo field)
     {
+        if (GeneratorsMap == null)
+            return false;
+
+        IGenerator<object> generator;
+
         foreach (var attribute in field.GetCustomAttributes())
         {
             if (attribute is not IdAttribute id)
                 continue;
 
-            if (GeneratorsMap == null ||
-                !GeneratorsMap.TryGetGenerator(instanceType, id.Id, field, out var generator))
-                return false;
+            if (!GeneratorsMap.TryGetGenerator(instanceType, id.Id, out generator))
+                break;
 
             field.SetValue(instance, generator.Generate());
 
+            return true;
+        }
+        
+        if (GeneratorsMap.TryGetGenerator(field, out generator))
+        {
+            field.SetValue(instance, generator.Generate());
             return true;
         }
 
@@ -114,6 +124,16 @@ public class GeneratorsMap
         _targetType = targetType;
         return this;
     }
+    
+    public GeneratorsMap Add(Type targetType, int id, IGenerator<object> generator)
+    {
+        if (_map.TryGetValue(_targetType, out var idMap))
+            idMap.Add(id, generator);
+        else
+            _map.Add(_targetType, new Dictionary<int, IGenerator<object>> { { id, generator } });
+
+        return this;
+    }
 
     public GeneratorsMap Add(int id, IGenerator<object> generator)
     {
@@ -137,11 +157,8 @@ public class GeneratorsMap
         return this;
     }
 
-    public bool TryGetGenerator(Type instanceType, int id, FieldInfo field, out IGenerator<object> generator)
+    public bool TryGetGenerator(FieldInfo field, out IGenerator<object> generator)
     {
-        if (_map.TryGetValue(instanceType, out var idMap))
-            return idMap.TryGetValue(id, out generator);
-
         if (typeof(IValue).IsAssignableFrom(field.FieldType))
         {
             generator = DefaultGenerators.GetExternalValueGenerator(field.FieldType.GenericTypeArguments[0]);
@@ -151,12 +168,20 @@ public class GeneratorsMap
         generator = null!;
         return false;
     }
+
+    public bool TryGetGenerator(Type instanceType, int id, out IGenerator<object> generator)
+    {
+        if (_map.TryGetValue(instanceType, out var idMap))
+            return idMap.TryGetValue(id, out generator);
+
+        generator = null!;
+        return false;
+    }
 }
 
 public static class DefaultGenerators
 {
     public static Type DefaultIdType = typeof(int);
-    public static Type[] DefaultValueTypes = new[] { typeof(Vector2) };
 
     public static IGenerator<object> GetExternalValueGenerator(Type targetType)
     {

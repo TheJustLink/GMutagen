@@ -250,7 +250,7 @@ public class ObjectCreator
         _objects[id] = objectRepo;
 
         foreach (var contract in template.Contracts)
-            objectRepo[contract.Key] = contract.Value.Clone();
+            objectRepo[contract.Key] = contract.Value; //.Clone()
 
         return new Object(id, _objects);
     }

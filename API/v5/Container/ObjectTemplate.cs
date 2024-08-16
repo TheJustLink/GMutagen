@@ -28,21 +28,24 @@ public class ObjectTemplate
         return new Object(instanceContracts);
     }
 
-    public void AddEmpty<T>()
+    public ObjectTemplate AddEmpty<T>()
     {
         _contracts.Add(typeof(T), new EmptyContract());
         _container.Add<T>();
+        return this;
     }
 
-    public void Add<T>(T value)
+    public ObjectTemplate Add<T>(T value)
     {
         _contracts.Add(typeof(T), value);
         _container.Add<T>().FromInstance(value);
+        return this;
     }
 
-    public void Set<T>(T value)
+    public ObjectTemplate Set<T>(T value)
     {
         _contracts[typeof(T)] = value;
         _container.Add<T>().FromInstance(value);
+        return this;
     }
 }
