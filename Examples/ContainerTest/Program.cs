@@ -4,9 +4,12 @@ using GMutagen.v5.Container;
 
 
 var value2Generator = DefaultGenerators.GetExternalValueGenerator(typeof(Vector2));
+/*var networkedVector2Generator = new Generator();*/
 var defaultPositionGenerator = new DefaultPositionGenerator();
 var objectTemplateContainer = new ObjectTemplateContainer();
-objectTemplateContainer.Add<IPosition>().As<DefaultPosition>().FromGenerator(defaultPositionGenerator);
+objectTemplateContainer.Add<IPosition>().As<DefaultPosition>()
+    .Add<IValue<Vector2>>().FromInstance(value2Generator.Generate());
+
 var position = objectTemplateContainer.Resolve<IPosition>();
 
 
@@ -22,7 +25,7 @@ class DefaultPositionGenerator : IGenerator<DefaultPosition>
 
         prevPosition.Value = new Vector2(2, 2);
         curPosition.Value = new Vector2(1, 1);
-        
+
         return new DefaultPosition(curPosition, prevPosition);
     }
 }

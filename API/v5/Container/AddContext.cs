@@ -1,4 +1,3 @@
-using System;
 using GMutagen.v5.Container;
 
 namespace GMutagen.v5;
@@ -29,6 +28,8 @@ public class AddContext : ContainerContext, IAddContext
 
     public IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true)
     {
+        _addAsContext.KeyType = KeyType;
+        _addAsContext.Type = instance.GetType(); 
         return _addAsContext.FromInstance(instance, registerAllContracts, shouldOverride);
     }
     

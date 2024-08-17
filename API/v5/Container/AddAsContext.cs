@@ -5,6 +5,7 @@ namespace GMutagen.v5;
 
 public interface IAddAsContext
 {
+    IAddContext Add<T>();
     IContainer FromConstructorGenerators(IGenerator<object>[] generators);
     IContainer FromGenerator(IGenerator<object> generator);
     IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true);
@@ -16,6 +17,11 @@ public class AddAsContext : ContainerContext, IAddAsContext
 
     public AddAsContext(ObjectTemplateContainer container) : base(container)
     {
+    }
+
+    public IAddContext Add<T>()
+    {
+        return Container.Add<T>();
     }
 
     public IContainer FromConstructorGenerators(IGenerator<object>[] generators)
@@ -44,9 +50,6 @@ public class AddAsContext : ContainerContext, IAddAsContext
 
         var instanceBindingsOption = new InstanceBindingsOption(instance);
 
-        if (!TypeCanBeConvertedTo(instanceType, KeyType))
-            throw new Exception("Is not instance of key type");
-        
         Container[KeyType].Set(OptionType.ResolveFrom, instanceBindingsOption);
         
         if (!registerAllContracts)
@@ -62,7 +65,7 @@ public class AddAsContext : ContainerContext, IAddAsContext
     {
         foreach (var interfaceType in instanceType.GetInterfaces())
         {
-            if (!Container.Dictionary.TryGetValue(instanceType, out var bindings))
+            if (!Container.Dictionary.TryGetValue(interfaceType, out var bindings))
             {
                 Container.Add(interfaceType);
                 Container[interfaceType].Set(OptionType.ResolveFrom, instanceBindingsOption);
@@ -97,6 +100,6 @@ public class AddAsContext : ContainerContext, IAddAsContext
 
     private bool TypeCanBeConvertedTo(Type instanceType, Type targetType)
     {
-        return !instanceType.IsSubclassOf(targetType) && !targetType.IsAssignableFrom(instanceType);
+        return instanceType.IsSubclassOf(targetType) || targetType.IsAssignableFrom(instanceType);
     }
 }

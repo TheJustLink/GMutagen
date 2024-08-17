@@ -50,7 +50,7 @@ public class ObjectTemplateContainer : IContainer
 
         object result;
 
-        if (TryCacheBindingsOption(bindings, out result))
+        if (TryInstanceBindingsOption(bindings, out result))
             return result;
 
         if (TryGeneratorBindingsOption(bindings, out result))
@@ -148,10 +148,10 @@ public class ObjectTemplateContainer : IContainer
     {
         return Dictionary.TryGetValue(type, out obj!);
     }
-
-    private bool TryCacheBindingsOption(Bindings bindings, out object result)
+    
+    private bool TryInstanceBindingsOption(Bindings bindings, out object result)
     {
-        if (bindings.TryGet<CacheBindingsOption>(OptionType.Cache, out var cacheBindingOption))
+        if (bindings.TryGet<InstanceBindingsOption>(OptionType.ResolveFrom, out var cacheBindingOption))
         {
             result = cacheBindingOption!.Instance;
             return true;
