@@ -17,8 +17,8 @@ class Test
     {
         var positionGenerator = GetDefaultPositionGenerator(idGenerator);
 
-        var playerTemplate = new ObjectTemplate();
-        playerTemplate.AddEmpty<IPosition>();
+        var playerTemplate = new Container.ObjectTemplate();
+        playerTemplate.Add<IPosition>();
 
         var player = playerTemplate.Create();
         //player.Set<IPosition>(positionGenerator.Generate());

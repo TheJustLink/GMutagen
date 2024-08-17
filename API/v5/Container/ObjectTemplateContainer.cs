@@ -8,6 +8,7 @@ namespace GMutagen.v5.Container;
 public interface IContainer
 {
     IAddContext Add<T>();
+    IAddContext Add(Type targetType);
     T Resolve<T>();
     object Resolve(Type type);
 }
@@ -165,6 +166,14 @@ public class ObjectTemplateContainer : IContainer
     {
         get => Dictionary[key];
         set => Dictionary[key] = value;
+    }
+
+    public void Add(ObjectTemplateContainer objectTemplateContainer)
+    {
+        foreach (var pair in objectTemplateContainer.Dictionary)
+        {
+            Dictionary[pair.Key] = pair.Value;
+        }
     }
 }
 

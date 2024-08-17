@@ -1,10 +1,12 @@
-using GMutagen.v5.Container;
+using System;
 
-namespace GMutagen.v5;
+namespace GMutagen.v5.Container;
 
 public interface IAddContext
 {
     IAddAsContext As<T>();
+    IAddAsContext As(Type type);
+    
     IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true);
 }
 
@@ -20,6 +22,11 @@ public class AddContext : ContainerContext, IAddContext
     public IAddAsContext As<T>()
     {
         var type = typeof(T);
+        return As(type);
+    }
+    
+    public IAddAsContext As(Type type)
+    {
         Container[KeyType].Set(OptionType.ResolveFrom, new ReflectionBindingsOption(type));
         _addAsContext.KeyType = KeyType;
         _addAsContext.Type = type;

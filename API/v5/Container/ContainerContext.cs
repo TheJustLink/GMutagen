@@ -1,7 +1,6 @@
 using System;
-using GMutagen.v5.Container;
 
-namespace GMutagen.v5;
+namespace GMutagen.v5.Container;
 
 public abstract class ContainerContext
 {

@@ -4,13 +4,15 @@ using GMutagen.v5.Container;
 
 
 var value2Generator = DefaultGenerators.GetExternalValueGenerator(typeof(Vector2));
-/*var networkedVector2Generator = new Generator();*/
-var defaultPositionGenerator = new DefaultPositionGenerator();
 var objectTemplateContainer = new ObjectTemplateContainer();
-objectTemplateContainer.Add<IPosition>().As<DefaultPosition>()
-    .Add<IValue<Vector2>>().FromInstance(value2Generator.Generate());
+    
+objectTemplateContainer
+    .Add<IValue<Vector2>>().As<ExternalValue<int, Vector2>>().FromGenerator(value2Generator);
 
-var position = objectTemplateContainer.Resolve<IPosition>();
+var gameObjectTemplate = new ObjectTemplate(objectTemplateContainer)
+    .Add<IPosition>(typeof(DefaultPosition));
+
+var obj = gameObjectTemplate.Create();
 
 
 Console.WriteLine("Hello, World!");
