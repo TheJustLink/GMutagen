@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Reflection;
 
-namespace GMutagen.v5;
+namespace GMutagen.v5.Container;
 
 public interface IContainer
 {
@@ -13,22 +14,25 @@ public interface IContainer
 
 public class ObjectTemplateContainer : IContainer
 {
-    public readonly Dictionary<Type, object> Dictionary;
+    public readonly Dictionary<Type, Bindings> Dictionary;
 
     private readonly AddContext _addContext;
-    public GeneratorsMap GeneratorsMap;
 
     public ObjectTemplateContainer()
     {
-        Dictionary = new Dictionary<Type, object>();
+        Dictionary = new Dictionary<Type, Bindings>();
         _addContext = new AddContext(this);
-        GeneratorsMap = new GeneratorsMap();
     }
 
     public IAddContext Add<T>()
     {
-        Dictionary.Add(typeof(T), null);
-        _addContext.KeyType = typeof(T);
+        return Add(typeof(T));
+    }
+    
+    public IAddContext Add(Type targetType)
+    {
+        Dictionary.Add(targetType, new Bindings());
+        _addContext.KeyType = targetType;
         return _addContext;
     }
 
@@ -39,73 +43,232 @@ public class ObjectTemplateContainer : IContainer
         return instance;
     }
 
-    private bool ValueExist(Type type, out object obj)
-    {
-        return Dictionary.TryGetValue(type, out obj) && obj != null;
-    }
-
-    private bool ContainsInstance(object obj)
-    {
-        return !(obj is Type);
-    }
-
     public object Resolve(Type targetType)
     {
-        if (!ValueExist(targetType, out var obj))
+        if (!ValueExist(targetType, out var bindings))
             throw new Exception("Value do not set yet");
 
-        if (ContainsInstance(obj))
-            return Dictionary[targetType];
+        object result;
 
-        var objType = (Type)obj;
-        var instance = Activator.CreateInstance(objType)!;
-        foreach (var field in objType.GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
-        {
-            if (TryInitFromGenerators(instance, objType, field))
-                continue;
+        if (TryCacheBindingsOption(bindings, out result))
+            return result;
 
-            var fieldType = field.FieldType;
-            var fieldEntityInstance = Resolve(fieldType);
-            field.SetValue(instance, fieldEntityInstance);
-        }
+        if (TryGeneratorBindingsOption(bindings, out result))
+            return result;
 
-        return instance;
+        if (TryGeneratorConstructorBindingsOption(bindings, out result))
+            return result;
+
+        if (TryReflectionBindingsOption(bindings, out result))
+            return result;
+
+        throw new Exception($"Type: {targetType} was not binded");
     }
 
-    private bool TryInitFromGenerators(object instance, Type instanceType, FieldInfo field)
+    private bool TryReflectionBindingsOption(Bindings bindings, out object result)
     {
-        if (GeneratorsMap == null)
+        if (!bindings.TryGet<ReflectionBindingsOption>(OptionType.ResolveFrom, out var reflectionBindingsOption))
+        {
+            result = null!;
             return false;
-
-        IGenerator<object> generator;
-
-        foreach (var attribute in field.GetCustomAttributes())
-        {
-            if (attribute is not IdAttribute id)
-                continue;
-
-            if (!GeneratorsMap.TryGetGenerator(instanceType, id.Id, out generator))
-                break;
-
-            field.SetValue(instance, generator.Generate());
-
-            return true;
-        }
-        
-        if (GeneratorsMap.TryGetGenerator(field, out generator))
-        {
-            field.SetValue(instance, generator.Generate());
-            return true;
         }
 
+        var objType = reflectionBindingsOption!.TargetType;
+
+        var constructor = GetConstructor(objType);
+
+        var declaredParameters = constructor.GetParameters();
+        var parameters = new object[declaredParameters.Length];
+
+        for (var i = 0; i < declaredParameters.Length; i++)
+        {
+            var parameter = declaredParameters[i];
+
+            var parameterType = parameter.ParameterType;
+            var parameterEntityInstance = Resolve(parameterType);
+            parameters[i] = parameterEntityInstance;
+        }
+
+        result = Activator.CreateInstance(objType, parameters)!;
+
+        return true;
+    }
+
+    private bool TryGeneratorConstructorBindingsOption(Bindings bindings, out object result)
+    {
+        if (!bindings.TryGet<GeneratorConstructorBindings>(OptionType.ResolveFrom, out var generatorConstructorBindings))
+        {
+            result = null!;
+            return false;
+        }
+
+        var generators = generatorConstructorBindings!.Generators;
+        var parameters = new object[generators.Length];
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            parameters[i] = generators[i].Generate();
+        }
+
+        result = Activator.CreateInstance(generatorConstructorBindings.TargetType, parameters);
+        return true;
+    }
+
+    private ConstructorInfo GetConstructor(Type objType)
+    {
+        var constructors = objType.GetConstructors();
+
+        if (constructors.Length == 1)
+            return constructors[0];
+
+        foreach (var constructorInfo in constructors)
+        {
+            foreach (var attribute in constructorInfo.GetCustomAttributes())
+            {
+                if (attribute.GetType() == typeof(Inject))
+                    return constructorInfo;
+            }
+        }
+
+        throw new Exception("Constructor cannot be found");
+    }
+
+    private bool TryGeneratorBindingsOption(Bindings bindings, out object result)
+    {
+        if (bindings.TryGet<GeneratorBindingsOption>(OptionType.ResolveFrom, out var generatorBindings))
+        {
+            result = generatorBindings!.Generator.Generate();
+            return true;
+        }
+
+        result = null!;
         return false;
     }
 
-    public object this[Type key]
+    private bool ValueExist(Type type, out Bindings obj)
+    {
+        return Dictionary.TryGetValue(type, out obj!);
+    }
+
+    private bool TryCacheBindingsOption(Bindings bindings, out object result)
+    {
+        if (bindings.TryGet<CacheBindingsOption>(OptionType.Cache, out var cacheBindingOption))
+        {
+            result = cacheBindingOption!.Instance;
+            return true;
+        }
+
+        result = null!;
+        return false;
+    }
+
+    public Bindings this[Type key]
     {
         get => Dictionary[key];
         set => Dictionary[key] = value;
     }
+}
+
+public class Inject : Attribute
+{
+}
+
+public class Bindings
+{
+    private readonly Dictionary<OptionType, BindingOption> _options;
+
+    public Bindings() : this(new Dictionary<OptionType, BindingOption>())
+    {
+    }
+
+    public Bindings(Dictionary<OptionType, BindingOption> options)
+    {
+        _options = options;
+    }
+
+    public void Set(OptionType optionType, BindingOption option)
+    {
+        _options[optionType] = option;
+    }
+    
+    public void Remove(OptionType optionType)
+    {
+        _options.Remove(optionType);
+    }
+
+    public bool TryGet<T>(OptionType optionType, out T? option) where T : BindingOption
+    {
+        option = null;
+        
+        if (!_options.TryGetValue(optionType, out var optionObj))
+            return false;
+
+        if (optionObj is not T ToptionObj) 
+            return false;
+        
+        option = ToptionObj;
+        return true;
+    }
+}
+
+public enum OptionType
+{
+    Cache,
+    ResolveFrom,
+}
+
+public class BindingOption
+{
+}
+
+public class CacheBindingsOption : BindingOption
+{
+    public CacheBindingsOption(object instance)
+    {
+        Instance = instance;
+    }
+    public object Instance { get; }
+}
+
+public class InstanceBindingsOption : BindingOption
+{
+    public InstanceBindingsOption(object instance)
+    {
+        Instance = instance;
+    }
+
+    public object Instance { get; }
+}
+
+public class ReflectionBindingsOption : BindingOption
+{
+    public ReflectionBindingsOption(Type targetType)
+    {
+        TargetType = targetType;
+    }
+
+    public Type TargetType { get; }
+}
+
+public class GeneratorBindingsOption : BindingOption
+{
+    public GeneratorBindingsOption(IGenerator<object> generator)
+    {
+        Generator = generator;
+    }
+
+    public IGenerator<object> Generator { get; set; }
+}
+
+public class GeneratorConstructorBindings : BindingOption
+{
+    public GeneratorConstructorBindings(Type targetType, params IGenerator<object>[] generators)
+    {
+        Generators = generators;
+        TargetType = targetType;
+    }
+
+    public IGenerator<object>[] Generators { get; }
+    public Type TargetType { get; }
 }
 
 public class GeneratorsMap
@@ -124,7 +287,7 @@ public class GeneratorsMap
         _targetType = targetType;
         return this;
     }
-    
+
     public GeneratorsMap Add(Type targetType, int id, IGenerator<object> generator)
     {
         if (_map.TryGetValue(_targetType, out var idMap))

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GMutagen.v5.Container;
 
 namespace GMutagen.v5;
 
@@ -12,7 +13,6 @@ public class ObjectTemplate
     {
         _contracts = new Dictionary<Type, object>();
         _container = new ObjectTemplateContainer();
-        _container.GeneratorsMap = new GeneratorsMap();
     }
 
     public Object Create()

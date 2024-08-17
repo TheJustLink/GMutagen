@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using GMutagen.v5.Container;
 
 namespace GMutagen.v5;
 
@@ -45,14 +46,11 @@ class Test
 
 public class DefaultPosition : IPosition
 {
-    [Id(1)]
     private readonly IValue<Vector2> _currentPosition;
     private readonly IValue<Vector2> _previousPosition;
+    
 
-    public DefaultPosition()
-    {
-    }
-
+    [Inject]
     public DefaultPosition(IValue<Vector2> currentPosition, IValue<Vector2> previousPosition)
     {
         _currentPosition = currentPosition;

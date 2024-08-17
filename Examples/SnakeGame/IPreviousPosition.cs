@@ -1,2 +1,5 @@
 ﻿namespace SnakeGame;
-public interface IPreviousPosition : IPosition;
+
+public interface IPreviousPosition : IPosition
+{
+}

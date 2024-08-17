@@ -1,2 +1,5 @@
 ﻿namespace SnakeGame;
-public interface IPosition : IValue<Vector2>;
+
+public interface IPosition : IValue<Vector2>
+{
+}

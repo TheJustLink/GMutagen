@@ -1,11 +1,12 @@
 using System;
+using GMutagen.v5.Container;
 
 namespace GMutagen.v5;
 
 public interface IAddContext
 {
     IAddAsContext As<T>();
-    IContainer FromInstance(object instance, bool registerAllContracts = false, bool shouldOverride = false);
+    IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true);
 }
 
 public class AddContext : ContainerContext, IAddContext
@@ -20,7 +21,7 @@ public class AddContext : ContainerContext, IAddContext
     public IAddAsContext As<T>()
     {
         var type = typeof(T);
-        Container[KeyType] = type;
+        Container[KeyType].Set(OptionType.ResolveFrom, new ReflectionBindingsOption(type));
         _addAsContext.KeyType = KeyType;
         _addAsContext.Type = type;
         return _addAsContext;
@@ -28,37 +29,7 @@ public class AddContext : ContainerContext, IAddContext
 
     public IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true)
     {
-        var instanceType = instance.GetType();
-
-        if (!TypeCanBeConvertedTo(instanceType, KeyType))
-            throw new Exception("Is not instance of key type");
-
-        if (!registerAllContracts)
-        {
-            Container[KeyType] = instance;
-            return Container;
-        }
-
-        foreach (var interfaceType in instanceType.GetInterfaces())
-        {
-            if(!Container.Dictionary.TryAdd(interfaceType, instance) && shouldOverride);
-                Container[interfaceType] = instance;
-        }
-
-        var baseType = instanceType.BaseType;
-        while (baseType != typeof(object))
-        {
-            if (!Container.Dictionary.TryAdd(baseType, instance) && shouldOverride)
-                Container[baseType] = instance;
-
-            baseType = instanceType.BaseType;
-        }
-
-        return Container;
+        return _addAsContext.FromInstance(instance, registerAllContracts, shouldOverride);
     }
-
-    private bool TypeCanBeConvertedTo(Type instanceType, Type targetType)
-    {
-        return instanceType.IsSubclassOf(targetType) || targetType.IsAssignableFrom(instanceType);
-    }
+    
 }

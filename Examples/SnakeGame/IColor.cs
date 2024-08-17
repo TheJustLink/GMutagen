@@ -1,3 +1,5 @@
 ﻿namespace SnakeGame;
 
-public interface IColor : IValue<ConsoleColor>;
+public interface IColor : IValue<ConsoleColor>
+{
+}

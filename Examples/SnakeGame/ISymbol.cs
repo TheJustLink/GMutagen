@@ -1,3 +1,5 @@
 ﻿namespace SnakeGame;
 
-public interface ISymbol : IValue<char>;
+public interface ISymbol : IValue<char>
+{
+}
