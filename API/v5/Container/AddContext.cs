@@ -4,9 +4,9 @@ namespace GMutagen.v5.Container;
 
 public interface IAddContext
 {
-    IAddAsContext As<T>();
-    IAddAsContext As(Type type);
-    
+    IAddAsContext As<T>(bool shouldOverride = true);
+    IAddAsContext As(Type type, bool shouldOverride = true);
+
     IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true);
 }
 
@@ -19,15 +19,23 @@ public class AddContext : ContainerContext, IAddContext
         _addAsContext = new AddAsContext(container);
     }
 
-    public IAddAsContext As<T>()
+    public IAddAsContext As<T>(bool shouldOverride = true)
     {
         var type = typeof(T);
-        return As(type);
+        return As(type, shouldOverride);
     }
-    
-    public IAddAsContext As(Type type)
+
+    public IAddAsContext As(Type type, bool shouldOverride = true)
     {
-        Container[KeyType].Set(OptionType.ResolveFrom, new ReflectionBindingsOption(type));
+        if (shouldOverride)
+            Container[KeyType].Set(OptionType.ResolveFrom, new ReflectionBindingsOption(type));
+        else
+        {
+            if (!Container[KeyType].Contains(OptionType.ResolveFrom))
+                Container[KeyType].Set(OptionType.ResolveFrom, new ReflectionBindingsOption(type));
+        }
+
+
         _addAsContext.KeyType = KeyType;
         _addAsContext.Type = type;
         return _addAsContext;
@@ -36,8 +44,7 @@ public class AddContext : ContainerContext, IAddContext
     public IContainer FromInstance(object instance, bool registerAllContracts = true, bool shouldOverride = true)
     {
         _addAsContext.KeyType = KeyType;
-        _addAsContext.Type = instance.GetType(); 
+        _addAsContext.Type = instance.GetType();
         return _addAsContext.FromInstance(instance, registerAllContracts, shouldOverride);
     }
-    
 }

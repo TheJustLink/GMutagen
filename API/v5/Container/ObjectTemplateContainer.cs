@@ -217,6 +217,11 @@ public class Bindings
         option = ToptionObj;
         return true;
     }
+
+    public bool Contains(OptionType optionType)
+    {
+        return _options.ContainsKey(optionType);
+    }
 }
 
 public enum OptionType

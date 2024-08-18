@@ -8,24 +8,22 @@ public class ObjectTemplate
     private readonly ObjectTemplateContainer _container;
     private readonly HashSet<Type> _contracts;
 
-    public ObjectTemplate() : this(new ObjectTemplateContainer(),new HashSet<Type>())
+    public ObjectTemplate() : this(new ObjectTemplateContainer(), new HashSet<Type>())
     {
-       
     }
-    
-    public ObjectTemplate(ObjectTemplateContainer container) : this(container,new HashSet<Type>())
+
+    public ObjectTemplate(ObjectTemplateContainer container) : this(container, new HashSet<Type>())
     {
-       
     }
 
     public ObjectTemplate(params ObjectTemplate[] baseTemplates)
     {
         _contracts = new HashSet<Type>();
         _container = new ObjectTemplateContainer();
-        
+
         foreach (var objectTemplate in baseTemplates)
         {
-            _contracts.UnionWith(objectTemplate._contracts);    
+            _contracts.UnionWith(objectTemplate._contracts);
             _container.Add(objectTemplate._container);
         }
     }
@@ -59,7 +57,7 @@ public class ObjectTemplate
         _container.Add<T>();
         return this;
     }
-    
+
     public ObjectTemplate Add<T>(Type type)
     {
         var targetType = typeof(T);
@@ -67,10 +65,10 @@ public class ObjectTemplate
             return this;
 
         _contracts.Add(targetType);
-        _container.Add<T>().As(type);
+        _container.Add<T>().As(type, false);
         return this;
     }
-    
+
     public ObjectTemplate Add<T>(object instance)
     {
         var targetType = typeof(T);
@@ -78,7 +76,7 @@ public class ObjectTemplate
             return this;
 
         _contracts.Add(targetType);
-        _container.Add<T>().As(instance.GetType());
+        _container.Add<T>().As(instance.GetType(), false);
         return this;
     }
 
@@ -90,7 +88,7 @@ public class ObjectTemplate
 
 
         _contracts.Add(targetType);
-        _container.Add<T>().As(value.GetType());
+        _container.Add<T>().As(value.GetType(), false);
         return this;
     }
 }
