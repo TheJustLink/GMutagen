@@ -1,4 +1,4 @@
-﻿using Object = GMutagen.Object;
+﻿using Object = GMutagen.v1.Object;
 
 namespace SnakeGame;
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
 using System.Reflection;
 
 namespace GMutagen.v5.Container;

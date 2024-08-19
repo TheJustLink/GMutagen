@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 
-using GMutagen;
+using GMutagen.v1;
 
 var bulletTemplate = new ObjectTemplate()
     .Add<IPosition>(new PositionInMemory())

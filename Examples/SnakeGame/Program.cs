@@ -1,8 +1,8 @@
-﻿using GMutagen;
+﻿using GMutagen.v1;
 
 using SnakeGame;
 
-using Object = GMutagen.Object;
+using Object = GMutagen.v1.Object;
 
 
 // Templates

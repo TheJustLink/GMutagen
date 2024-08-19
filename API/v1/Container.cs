@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace GMutagen;
+namespace GMutagen.v1;
 
 public class Container
 {
@@ -17,7 +17,7 @@ public class Container
         _contractMap = new Dictionary<Type, object>();
 
         foreach (var pair in container._contractMap)
-            _contractMap.Add(pair.Key, pair.Value);  
+            _contractMap.Add(pair.Key, pair.Value);
     }
 
     public T Get<T>() where T : class
@@ -32,7 +32,7 @@ public class Container
     public bool TryGet<T>(out T contract) where T : class
     {
         var isSuccess = _contractMap.TryGetValue(typeof(T), out var result);
-        
+
         contract = (result as T)!;
 
         return isSuccess;
@@ -51,9 +51,9 @@ public class Container
     {
         _contractMap.Add(typeof(T), new EmptyContract());
     }
-    public void Add<T>() where T : class, new() 
+    public void Add<T>() where T : class, new()
     {
-        Add(new T()); 
+        Add(new T());
     }
     public void Add<T>(T contract) where T : class
     {

@@ -1,6 +1,6 @@
-﻿namespace GMutagen;
+﻿namespace GMutagen.v1;
 
-public class ObjectTemplate 
+public class ObjectTemplate
 {
     private static int s_currentId;
     private Container _container;
@@ -10,12 +10,12 @@ public class ObjectTemplate
         _container = new Container();
     }
 
-    public ObjectTemplate(ObjectTemplate template) 
+    public ObjectTemplate(ObjectTemplate template)
     {
         _container = template._container.Clone();
     }
 
-    public Object Create() 
+    public Object Create()
     {
         return new Object(s_currentId++, new Container(_container), this);
     }
@@ -34,7 +34,7 @@ public class ObjectTemplate
         return this;
     }
 
-    public ObjectTemplate Add<T>(T contract) where T : class 
+    public ObjectTemplate Add<T>(T contract) where T : class
     {
         _container.Add(contract);
 

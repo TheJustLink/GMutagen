@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
+using GMutagen.v1;
+
 namespace GMutagen.v3;
 
 

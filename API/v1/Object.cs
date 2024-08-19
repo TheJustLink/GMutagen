@@ -1,4 +1,4 @@
-﻿namespace GMutagen;
+﻿namespace GMutagen.v1;
 
 public class Object
 {
@@ -16,7 +16,7 @@ public class Object
 
     public T Get<T>() where T : class
     {
-       return Contracts.Get<T>();
+        return Contracts.Get<T>();
     }
 
     public Object Set<T>(T contract) where T : class
