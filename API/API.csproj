@@ -8,12 +8,4 @@
     <RootNamespace>GMutagen</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Compile Remove="NewFile1.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Remove="NewFile1.txt" />
-  </ItemGroup>
-
 </Project>
