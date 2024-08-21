@@ -1,147 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Numerics;
-
+using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace GMutagen.v6;
 
-class Test
-{
-    public static void Main()
-    {
-        Game(new GuidGenerator());
-        Game(new IncrementalGenerator<int>());
-    }
-
-    private static void Game<TId>(IGenerator<TId> idGenerator)
-    {
-        var positionGenerator = GetDefaultPositionGenerator(idGenerator);
-
-        var serviceCollection = new ServiceCollection()
-            .AddSingleton(idGenerator)
-            .AddScoped<IGenerator<IPosition, ITypeRead<IGenerator<object>>>, DefaultPositionGenerator>();
-
-        var serviceProvider = serviceCollection.BuildServiceProvider();
-        IGenerator<TId>? idGen1 = serviceProvider.GetService<IGenerator<TId>>();
-        IGenerator<TId> idGen2 = serviceProvider.GetRequiredService<IGenerator<TId>>();
-
-        using (var scope = serviceProvider.CreateScope())
-        {
-            // Unique position generator instance for this scope
-            var scopedPositionGenerator = scope.ServiceProvider.GetRequiredService<IGenerator<IPosition, ITypeRead<IGenerator<object>>>>();
-        }
-
-
-        var playerTemplate = (dynamic)new object(); ;// new Container.ObjectTemplate();
-        playerTemplate.Add<IPosition>();
-
-        var player = playerTemplate.Create();
-        //player.Set<IPosition>(positionGenerator.Generate());
-    }
-    public static IGenerator<IPosition> GetDefaultPositionGenerator<TId>(IGenerator<TId> idGenerator)
-    {
-        IReadWrite<TId, Vector2> positions = new MemoryRepository<TId, Vector2>();
-        IGenerator<IValue<Vector2>> positionValueGenerator = new ExternalValueGenerator<TId, Vector2>(idGenerator, positions);
-        IGenerator<IValue<Vector2>> lazyPositionValueGenerator = new GeneratorDecorator<IValue<Vector2>>(positionValueGenerator, new LazyValueGenerator<Vector2>());
-
-        ITypeReadWrite<IGenerator<object>> valueGenerators = new TypeRepository<IGenerator<object>>(); // fix it pls later pls pls pls
-        valueGenerators.Write(lazyPositionValueGenerator);
-
-        ITypeRead<IGenerator<object>> universalGenerator = valueGenerators;
-
-        var positionGenerator = CreateContractGenerator<IPosition>(universalGenerator, new DefaultPositionGenerator());
-        return positionGenerator;
-    }
-    public static IGenerator<TContract> CreateContractGenerator<TContract>(ITypeRead<IGenerator<object>> universalGenerator, IGenerator<TContract, ITypeRead<IGenerator<object>>> contractGenerator)
-    {
-        // return new GeneratorCache<TContract>(universalGenerator, contractGenerator);
-        return null;
-    }
-}
-
-public class DefaultPosition : IPosition
-{
-    private readonly IValue<Vector2> _currentPosition;
-    private readonly IValue<Vector2> _previousPosition;
-    
-
-    public DefaultPosition(IValue<Vector2> currentPosition, IValue<Vector2> previousPosition)
-    {
-        _currentPosition = currentPosition;
-        _previousPosition = previousPosition;
-    }
-
-    public Vector2 GetCurrentPositionWithOffset(Vector2 offset)
-    {
-        return _currentPosition.Value + offset;
-    }
-    public Vector2 GetPreviousPositionWithOffset(Vector2 offset)
-    {
-        return _previousPosition.Value + offset;
-    }
-}
-public interface IPosition
-{
-    Vector2 GetCurrentPositionWithOffset(Vector2 offset);
-    Vector2 GetPreviousPositionWithOffset(Vector2 offset);
-}
-public class ValueWithHistory<T> : IValue<T>
-{
-    private readonly IValue<T> _source;
-    private T _previousValue;
-
-    public ValueWithHistory(IValue<T> source, bool preInit = false)
-    {
-        _source = source;
-
-        if (preInit)
-            _previousValue = source.Value;
-    }
-
-    public T Value
-    {
-        get => _previousValue;
-        set
-        {
-            _previousValue = _source.Value;
-            _source.Value = value;
-        }
-    }
-}
-public class DefaultPositionGenerator : IGenerator<IPosition, ITypeRead<IGenerator<object>>>
-{
-    public IPosition Generate(ITypeRead<IGenerator<object>> input)
-    {
-        var currentPosition = input.Read<IGenerator<IValue<Vector2>>>().Generate();
-        var previousPosition = new ValueWithHistory<Vector2>(currentPosition);
-
-        return new DefaultPosition(currentPosition, previousPosition);
-    }
-
-    public IPosition this[ITypeRead<IGenerator<object>> id] => Read(id);
-    public IPosition Read(ITypeRead<IGenerator<object>> id) => Generate(id);
-}
-
-public class LazyValueGenerator<T> : IGenerator<LazyValue<T>, IGenerator<IValue<T>>>
-{
-    public LazyValue<T> Generate(IGenerator<IValue<T>> generator) => new(generator);
-
-    public LazyValue<T> this[IGenerator<IValue<T>> id] => Read(id);
-    public LazyValue<T> Read(IGenerator<IValue<T>> id) => Generate(id);
-}
-
-public class GeneratorDecorator<T> : GeneratorDecorator<T, T>
-{
-    public GeneratorDecorator(IGenerator<T> sourceGenerator, IGenerator<T, IGenerator<T>> proxyGenerator)
-        : base(sourceGenerator, proxyGenerator) { }
-}
 public class GeneratorDecorator<TIn, TOut> : IGenerator<TOut>
 {
     private readonly IGenerator<TIn> _sourceGenerator;
     private readonly IGenerator<TOut, IGenerator<TIn>> _proxyGenerator;
 
-    public GeneratorDecorator(IGenerator<TIn> sourceGenerator, IGenerator<TOut, IGenerator<TIn>> proxyGenerator)
+    protected GeneratorDecorator(IGenerator<TIn> sourceGenerator, IGenerator<TOut, IGenerator<TIn>> proxyGenerator)
     {
         _sourceGenerator = sourceGenerator;
         _proxyGenerator = proxyGenerator;
@@ -150,192 +20,9 @@ public class GeneratorDecorator<TIn, TOut> : IGenerator<TOut>
     public TOut Generate() => _proxyGenerator.Generate(_sourceGenerator);
 }
 
-public class LazyValue<T> : IValue<T>
-{
-    private readonly IGenerator<IValue<T>> _valueGenerator;
-    private IValue<T>? _cachedValue;
-
-    public LazyValue(IGenerator<IValue<T>> valueGenerator)
-    {
-        _valueGenerator = valueGenerator;
-    }
-
-    public T Value
-    {
-        get => (_cachedValue ??= _valueGenerator.Generate()).Value;
-        set => (_cachedValue ??= _valueGenerator.Generate()).Value = value;
-    }
-}
-
-public class ExternalValueGenerator<TId, TValue> : IGenerator<IValue<TValue>>
-{
-    private readonly IGenerator<TId> _idGenerator;
-    private readonly IReadWrite<TId, TValue> _readWrite;
-
-    public ExternalValueGenerator(IGenerator<TId> idGenerator, IReadWrite<TId, TValue> readWrite)
-    {
-        _idGenerator = idGenerator;
-        _readWrite = readWrite;
-    }
-
-    public IValue<TValue> Generate()
-    {
-        var id = _idGenerator.Generate();
-
-        return new ExternalValue<TId, TValue>(id, _readWrite);
-    }
-}
-public class GuidGenerator : IGenerator<Guid>
-{
-    public Guid Generate() => Guid.NewGuid();
-}
-
-public class IncrementalGenerator<T> : IValue<T>, IGenerator<T> where T : IAdditionOperators<T, int, T>
-{
-    public IncrementalGenerator() : this(default(T))
-    {
-    }
-
-    public IncrementalGenerator(T value)
-    {
-        Value = value;
-    }
-
-    public T Value { get; set; }
-
-    public T Generate()
-    {
-        var id = Value;
-
-        Value += 1;
-
-        return id;
-    }
-}
-public interface IGenerator<out TOut, in TIn> : IRead<TIn, TOut>
-{
-    TOut Generate(TIn input);
-}
 public interface IGenerator<out T>
 {
     T Generate();
-}
-public class TypeRepository<TValue> : MemoryRepository<Type, TValue>, ITypeReadWrite<TValue> where TValue : class
-{
-    public T Read<T>() where T : class
-    {
-        return Read(typeof(T)) as T;
-    }
-
-    public void Write<T>(T value)
-    {
-        Write(typeof(T), value as TValue);
-    }
-}
-
-public class MemoryRepository<TId, TValue> : IReadWrite<TId, TValue> where TId : notnull
-{
-    private readonly Dictionary<TId, TValue> _memory;
-
-    public MemoryRepository() : this(new Dictionary<TId, TValue>())
-    {
-    }
-
-    public MemoryRepository(Dictionary<TId, TValue> memory)
-    {
-        _memory = memory;
-    }
-
-    public TValue this[TId id]
-    {
-        get => Read(id);
-        set => Write(id, value);
-    }
-
-    public TValue Read(TId id)
-    {
-        return _memory[id];
-    }
-    public void Write(TId id, TValue value)
-    {
-        _memory[id] = value;
-    }
-}
-
-public interface ITypeReadWrite<out TValue> : ITypeRead<TValue>, ITypeWrite<TValue>
-{
-}
-
-public interface ITypeWrite<out TValue> : IRead<Type, TValue>
-{
-    void Write<T>(T value);
-}
-
-public interface ITypeRead<out TValue> : IRead<Type, TValue>
-{
-    T Read<T>() where T : class;
-}
-
-public interface IReadWrite<in TId, TValue> : IRead<TId, TValue>, IWrite<TId, TValue>
-{
-    TValue this[TId id] { get; set; }
-}
-
-public interface IRead<in TId, out TValue>
-{
-    TValue this[TId id] { get; }
-    TValue Read(TId id);
-}
-
-public interface IWrite<in TId, in TValue>
-{
-    TValue this[TId id] { set; }
-    void Write(TId id, TValue value);
-}
-
-public static class ReadWriteExtensions
-{
-    public static ExternalValue<TId, TValue> Instantiate<TId, TValue>(this IReadWrite<TId, TValue> readWrite,
-        IGenerator<TId> idGenerator)
-    {
-        return new ExternalValue<TId, TValue>(idGenerator.Generate(), readWrite);
-    }
-
-    public static ExternalValue<TId, TValue> GetInstance<TId, TValue>(this IReadWrite<TId, TValue> readWrite, TId id)
-    {
-        return new ExternalValue<TId, TValue>(id, readWrite);
-    }
-}
-
-public class ExternalValue<TId, TValue> : IValue<TValue>
-{
-    private readonly TId _id;
-    private readonly IRead<TId, TValue> _reader;
-    private readonly IWrite<TId, TValue> _writer;
-
-    public ExternalValue(TId id, IReadWrite<TId, TValue> readWrite) : this(id, readWrite, readWrite)
-    {
-       
-    }
-
-    public ExternalValue(TId id, IRead<TId, TValue> reader, IWrite<TId, TValue> writer)
-    {
-        _id = id;
-        _reader = reader;
-        _writer = writer;
-        _writer.Write(id, default(TValue));
-    }
-
-    public TValue Value
-    {
-        get => _reader.Read(_id);
-        set => _writer.Write(_id, value);
-    }
-}
-
-public interface IValue<T> : IValue
-{
-    T Value { get; set; }
 }
 
 public interface IValue
@@ -344,34 +31,220 @@ public interface IValue
 
 public class Object
 {
-    private readonly Dictionary<Type, object> _contracts;
+    private readonly Dictionary<Type, object> _staticContracts;
+    private readonly Dictionary<Type, IDynamicContract> _dynamicContracts;
+    private readonly ObjectTemplate _template;
 
-    public Object(Dictionary<Type, object> contracts)
+    public Object(Dictionary<Type, object> staticContracts, ObjectTemplate template) : this(staticContracts, template, new Dictionary<Type, IDynamicContract>())
     {
-        _contracts = contracts;
+    }
+
+    public Object(Dictionary<Type, object> staticContracts, ObjectTemplate template, Dictionary<Type, IDynamicContract> dynamicContracts)
+    {
+        _staticContracts = staticContracts;
+        _template = template;
+        _dynamicContracts = dynamicContracts;
     }
 
     public T Get<T>()
     {
-        return (T)_contracts[typeof(T)];
+        if(_staticContracts.TryGetValue(typeof(T), out var contract))
+            return (T)contract;
+
+        if (_dynamicContracts.TryGetValue(typeof(T), out var dynamicContract))
+            return dynamicContract.Get<T>();
+
+        throw new Exception("Contract are not available");
     }
-}
 
-internal interface IFromReflection
-{
-}
-
-[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
-public class IdAttribute : Attribute
-{
-    public int Id;
-
-    public IdAttribute(int id)
+    public bool TryGet<T>(out T contract)
     {
-        Id = id;
+        contract = default!;
+
+        var success = _staticContracts.TryGetValue(typeof(T), out var contractObj);
+
+        if (!success)
+            return false;
+
+        contract = (T)contractObj!;
+        return true;
     }
 }
 
-public class EmptyContract
+public interface IDynamicContract
 {
+    T Get<T>();
+    bool TryGet<T>(out T contract);
+}
+
+public class FromObjectContractDynamic : IDynamicContract
+{
+    public Object Source { get; set; }
+
+    public FromObjectContractDynamic(Object source)
+    {
+        Source = source;
+    }
+
+    public T Get<T>()
+    {
+        return Source.Get<T>();
+    }
+
+    public bool TryGet<T>(out T contract)
+    {
+        return Source.TryGet<T>(out contract);
+    }
+}
+
+public class FromObjectContractStatic : IDynamicContract
+{
+    private readonly Object _source;
+
+    public FromObjectContractStatic(Object source)
+    {
+        _source = source;
+    }
+    
+    public T Get<T>()
+    {
+        return _source.Get<T>();
+    }
+
+    public bool TryGet<T>(out T contract)
+    {
+        return _source.TryGet<T>(out contract);
+    }
+}
+
+public class ObjectTemplate
+{
+    private readonly HashSet<Type> _contracts;
+    private readonly Dictionary<Type, object> _dynamicContractBindings;
+    private readonly ServiceCollection _serviceCollection;
+    private IServiceProvider _serviceProvider = null!;
+
+    public ObjectTemplate() : this(new HashSet<Type>(), new ServiceCollection(), new Dictionary<Type, object>())
+    {
+    }
+
+    public ObjectTemplate(params ObjectTemplate[] templates)
+    {
+        _dynamicContractBindings = new Dictionary<Type, object>();
+        _contracts = new HashSet<Type>();
+        _serviceCollection = new ServiceCollection();
+
+        foreach (var template in templates)
+        {
+            foreach (var contract in template._contracts)
+            {
+                if (_contracts.Contains(contract))
+                    continue;
+
+                _contracts.Add(contract);
+            }
+
+            foreach (var service in template._serviceCollection)
+            {
+                if (_serviceCollection.First(s => s.ServiceType == service.ServiceType) != null)
+                    throw new ArgumentException("Can not resolve types");
+
+                _serviceCollection.Add(service);
+            }
+
+            foreach (var pair in template._dynamicContractBindings)
+            {
+                if(!_dynamicContractBindings.TryAdd(pair.Key, pair.Value))
+                    throw new ArgumentException("Can not resolve types");
+            }
+        }
+    }
+
+    private ObjectTemplate(HashSet<Type> contracts, ServiceCollection serviceCollection, Dictionary<Type, object> dynamicContractBindings)
+    {
+        _contracts = contracts;
+        _serviceCollection = serviceCollection;
+        _dynamicContractBindings = dynamicContractBindings;
+    }
+
+    public Object Create()
+    {
+        if (_serviceProvider == null!)
+            _serviceProvider = _serviceCollection.BuildServiceProvider();
+
+        var instanceContracts = new Dictionary<Type, object>();
+
+        foreach (var contractType in _contracts)
+            instanceContracts.Add(contractType, _serviceProvider.GetRequiredService(contractType));
+
+        foreach (var pair in _dynamicContractBindings)
+        {
+            var value = _dynamicContractBindings[pair.Key];
+            
+            switch (value)
+            {
+                case Object obj:
+                    instanceContracts.Add(pair.Key, new FromObjectContractStatic(obj));
+                    break;
+                case ObjectTemplate objectTemplate:
+                    instanceContracts.Add(pair.Key, new FromObjectContractStatic(objectTemplate.Create()));
+                    break;
+                case 
+            }
+        }
+
+        var instance = new Object(instanceContracts, this);
+        return instance;
+    }
+
+    public ObjectTemplate AddFromObject<TInterface>(Object obj) where TInterface : class
+    {
+        _dynamicContractBindings[typeof(TInterface)] = obj;
+        return this;
+    }
+    public ObjectTemplate AddFromObject<TInterface>(FromObjectContractStatic binding) where TInterface : class
+    {
+        _dynamicContractBindings[typeof(TInterface)] = binding;
+        return this;
+    }
+    public ObjectTemplate AddFromObject<TInterface>(FromObjectContractDynamic binding) where TInterface : class
+    {
+        _dynamicContractBindings[typeof(TInterface)] = binding;
+        return this;
+    }
+    
+    public ObjectTemplate AddFromObjectOf<TInterface>(ObjectTemplate template) where TInterface : class
+    {
+        _dynamicContractBindings[typeof(TInterface)] = template;
+        return this;
+    }
+    
+    public ObjectTemplate Add<TInterface, TType>() where TType : class, TInterface where TInterface : class
+    {
+        _serviceCollection.AddTransient<TInterface, TType>();
+        return this;
+    }
+
+    public ObjectTemplate Add<TType>() where TType : class
+    {
+        _serviceCollection.AddTransient<TType>();
+        return this;
+    }
+
+    public ObjectTemplate Set<TInterface, TType>() where TType : class, TInterface where TInterface : class
+    {
+        for (int i = 0; i < _serviceCollection.Count; i++)
+        {
+            var service = _serviceCollection[i];
+            if (service.ServiceType != typeof(TInterface))
+                continue;
+
+            var newService = new ServiceDescriptor(typeof(TInterface), service.ServiceKey, typeof(TType),
+                ServiceLifetime.Transient);
+
+            _serviceCollection[i] = newService;
+        }
+
+        return this;
+    }
 }

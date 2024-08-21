@@ -6,8 +6,8 @@ namespace GMutagen.v5.Container;
 
 public interface IContainer
 {
-    IAddContext Add<T>();
-    IAddContext Add(Type targetType);
+    IAddContext Add<T>(bool shouldOverride = true);
+    IAddContext Add(Type targetType, bool shouldOverride = true);
     T Resolve<T>();
     object Resolve(Type type);
 }
@@ -24,14 +24,20 @@ public class ObjectTemplateContainer : IContainer
         _addContext = new AddContext(this);
     }
 
-    public IAddContext Add<T>()
+    public IAddContext Add<T>(bool shouldOverride = true)
     {
-        return Add(typeof(T));
+        return Add(typeof(T), shouldOverride);
     }
-    
-    public IAddContext Add(Type targetType)
+
+    public IAddContext Add(Type targetType, bool shouldOverride = true)
     {
-        Dictionary.Add(targetType, new Bindings());
+        if (!Dictionary.ContainsKey(targetType))
+            Dictionary[targetType] = new Bindings();
+        {
+            if (shouldOverride)
+                Dictionary[targetType] = new Bindings();
+        }
+
         _addContext.KeyType = targetType;
         return _addContext;
     }
@@ -65,6 +71,28 @@ public class ObjectTemplateContainer : IContainer
         throw new Exception($"Type: {targetType} was not binded");
     }
 
+    public bool TryResolve(Type targetType, out object result)
+    {
+        result = null!;
+        
+        if (!ValueExist(targetType, out var bindings))
+            return false;
+        
+        if (TryInstanceBindingsOption(bindings, out result))
+            return true;
+
+        if (TryGeneratorBindingsOption(bindings, out result))
+            return true;
+
+        if (TryGeneratorConstructorBindingsOption(bindings, out result))
+            return true;
+
+        if (TryReflectionBindingsOption(bindings, out result))
+            return true;
+
+        return false;
+    }
+
     private bool TryReflectionBindingsOption(Bindings bindings, out object result)
     {
         if (!bindings.TryGet<ReflectionBindingsOption>(OptionType.ResolveFrom, out var reflectionBindingsOption))
@@ -74,6 +102,8 @@ public class ObjectTemplateContainer : IContainer
         }
 
         var objType = reflectionBindingsOption!.TargetType;
+        if (TryResolve(objType, out result))
+            return true;
 
         var constructor = GetConstructor(objType);
 
@@ -96,7 +126,8 @@ public class ObjectTemplateContainer : IContainer
 
     private bool TryGeneratorConstructorBindingsOption(Bindings bindings, out object result)
     {
-        if (!bindings.TryGet<GeneratorConstructorBindings>(OptionType.ResolveFrom, out var generatorConstructorBindings))
+        if (!bindings.TryGet<GeneratorConstructorBindings>(OptionType.ResolveFrom,
+                out var generatorConstructorBindings))
         {
             result = null!;
             return false;
@@ -148,7 +179,7 @@ public class ObjectTemplateContainer : IContainer
     {
         return Dictionary.TryGetValue(type, out obj!);
     }
-    
+
     private bool TryInstanceBindingsOption(Bindings bindings, out object result)
     {
         if (bindings.TryGet<InstanceBindingsOption>(OptionType.ResolveFrom, out var cacheBindingOption))
@@ -197,7 +228,7 @@ public class Bindings
     {
         _options[optionType] = option;
     }
-    
+
     public void Remove(OptionType optionType)
     {
         _options.Remove(optionType);
@@ -206,13 +237,13 @@ public class Bindings
     public bool TryGet<T>(OptionType optionType, out T? option) where T : BindingOption
     {
         option = null;
-        
+
         if (!_options.TryGetValue(optionType, out var optionObj))
             return false;
 
-        if (optionObj is not T ToptionObj) 
+        if (optionObj is not T ToptionObj)
             return false;
-        
+
         option = ToptionObj;
         return true;
     }
@@ -239,6 +270,7 @@ public class CacheBindingsOption : BindingOption
     {
         Instance = instance;
     }
+
     public object Instance { get; }
 }
 

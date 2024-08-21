@@ -5,12 +5,12 @@ using GMutagen.v5.Container;
 
 var value2Generator = DefaultGenerators.GetExternalValueGenerator(typeof(Vector2));
 var objectTemplateContainer = new ObjectTemplateContainer();
-    
+
 objectTemplateContainer
     .Add<IValue<Vector2>>().As<ExternalValue<int, Vector2>>().FromGenerator(value2Generator);
 
 var gameObjectTemplate = new ObjectTemplate(objectTemplateContainer)
-    .Add<IPosition>(typeof(DefaultPosition));
+    .Add<IPosition>();
 
 var obj = gameObjectTemplate.Create();
 

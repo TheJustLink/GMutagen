@@ -54,7 +54,7 @@ public class ObjectTemplate
             return this;
 
         _contracts.Add(targetType);
-        _container.Add<T>();
+        _container.Add<T>(false);
         return this;
     }
 
@@ -65,7 +65,7 @@ public class ObjectTemplate
             return this;
 
         _contracts.Add(targetType);
-        _container.Add<T>().As(type, false);
+        _container.Add<T>(false).As(type, false);
         return this;
     }
 
@@ -76,7 +76,7 @@ public class ObjectTemplate
             return this;
 
         _contracts.Add(targetType);
-        _container.Add<T>().As(instance.GetType(), false);
+        _container.Add<T>(false).As(instance.GetType(), false);
         return this;
     }
 
@@ -88,7 +88,7 @@ public class ObjectTemplate
 
 
         _contracts.Add(targetType);
-        _container.Add<T>().As(value.GetType(), false);
+        _container.Add<T>(false).As(value.GetType(), false);
         return this;
     }
 }
