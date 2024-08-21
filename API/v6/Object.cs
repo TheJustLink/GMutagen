@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,45 +30,162 @@ public interface IValue
 {
 }
 
-public class Object
+public abstract class ContractStub
 {
-    private readonly Dictionary<Type, object> _staticContracts;
-    private readonly Dictionary<Type, IDynamicContract> _dynamicContracts;
-    private readonly ObjectTemplate _template;
+    public abstract T Get<T>();
+    public abstract bool TryGet<T>(out T contract);
+}
 
-    public Object(Dictionary<Type, object> staticContracts, ObjectTemplate template) : this(staticContracts, template, new Dictionary<Type, IDynamicContract>())
+public class FromObjectContractStub : ContractStub
+{
+    private readonly Object _obj;
+
+    public FromObjectContractStub(Object obj)
     {
+        _obj = obj;
     }
 
-    public Object(Dictionary<Type, object> staticContracts, ObjectTemplate template, Dictionary<Type, IDynamicContract> dynamicContracts)
+    public override T Get<T>()
+    {
+        return _obj.Get<T>();
+    }
+
+    public override bool TryGet<T>(out T contract)
+    {
+        return _obj.TryGet(out contract);
+    }
+}
+
+public class StaticContractStub : ContractStub
+{
+    private readonly object _contract;
+
+    public StaticContractStub(object contract)
+    {
+        _contract = contract;
+    }
+
+    public override T Get<T>()
+    {
+        return (T)_contract;
+    }
+
+    public override bool TryGet<T>(out T contract)
+    {
+        contract = (T)_contract;
+        return true;
+    }
+}
+
+public class Object : IObject
+{
+    private readonly Dictionary<Type, ContractStub> _staticContracts;
+    private readonly ObjectTemplate _template;
+
+    public Object(Dictionary<Type, ContractStub> staticContracts, ObjectTemplate template)
     {
         _staticContracts = staticContracts;
         _template = template;
-        _dynamicContracts = dynamicContracts;
     }
 
     public T Get<T>()
     {
-        if(_staticContracts.TryGetValue(typeof(T), out var contract))
-            return (T)contract;
-
-        if (_dynamicContracts.TryGetValue(typeof(T), out var dynamicContract))
-            return dynamicContract.Get<T>();
-
-        throw new Exception("Contract are not available");
+        return _staticContracts[typeof(T)].Get<T>();
     }
 
     public bool TryGet<T>(out T contract)
     {
         contract = default!;
 
-        var success = _staticContracts.TryGetValue(typeof(T), out var contractObj);
+        var success = _staticContracts.TryGetValue(typeof(T), out var contractStub);
 
         if (!success)
             return false;
 
-        contract = (T)contractObj!;
-        return true;
+        if (contractStub.TryGet(out contract))
+            return true;
+        
+        return false;
+    }
+}
+
+public class ObjectStateMachine : IObject
+{
+    private readonly Object[] _states;
+    public int Index { get; set; }
+
+    public ObjectStateMachine(Object[] states, int index)
+    {
+        _states = states;
+        Index = index;
+    }
+    
+    public T Get<T>()
+    {
+        return _states[Index].Get<T>();
+    }
+
+    public bool TryGet<T>(out T contract)
+    {
+        return _states[Index].TryGet<T>(out contract);
+    }
+}
+
+public class ObjectCompose : IObject
+{
+    private readonly Object[] _objects;
+
+    public ObjectCompose(Object[] objects)
+    {
+        _objects = objects;
+    }
+    
+    public T Get<T>()
+    {
+        foreach (var state in _objects)
+        {
+            if (state.TryGet<T>(out var contract))
+                return contract;
+        }
+
+        throw new Exception();
+    }
+
+    public bool TryGet<T>(out T contract)
+    {
+        foreach (var state in _objects)
+        {
+            if (state.TryGet<T>(out contract))
+                return true;
+        }
+
+        contract = default!;
+        return false;
+    }
+}
+
+
+public interface IObject
+{
+    T Get<T>();
+    bool TryGet<T>(out T contract);
+}
+
+public class DynamicContract<T> where T : class
+{
+    private readonly Object _targetObject;
+
+    public DynamicContract(Object targetObject)
+    {
+        _targetObject = targetObject;
+    }
+
+    public static implicit operator T(DynamicContract<T> dynamicContract)
+    {
+        if (dynamicContract._targetObject.TryGet<T>(out var contract))
+            return contract;
+        
+        return null!;
     }
 }
 
@@ -96,6 +214,8 @@ public class FromObjectContractDynamic : IDynamicContract
         return Source.TryGet<T>(out contract);
     }
 }
+
+
 
 public class FromObjectContractStatic : IDynamicContract
 {
