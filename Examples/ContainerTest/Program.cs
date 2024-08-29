@@ -15,7 +15,7 @@ var gameObjectTemplate = new ObjectTemplate(objectTemplateContainer)
 var obj = gameObjectTemplate.Create();
 
 
-Console.WriteLine("Hello, World!");
+Console.WriteLine("Bye, World!");
 
 class DefaultPositionGenerator : IGenerator<DefaultPosition>
 {

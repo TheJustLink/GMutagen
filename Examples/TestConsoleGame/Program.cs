@@ -1,50 +1,44 @@
-﻿using System.Numerics;
+﻿using GMutagen.v7;
 
-using GMutagen.v1;
+var scene = new Scene();
 
-var bulletTemplate = new ObjectTemplate()
-    .Add<IPosition>(new PositionInMemory())
-    .Add<IThrow>(new DefaultThrow());
+var obj1 = scene.AddObject();
+obj1.Set<ByeContractImplementation>();
 
-var homingBulletTemplate = new ObjectTemplate(bulletTemplate)
-    .Add<ITarget>(new Target());
+var obj2 = scene.AddObject();
+obj2.Set<IHelloContract, HelloContractImplementation>();
+obj2.Set<IByeContract>(obj1);
 
+var byecontract = obj2.Get<IByeContract>();
+byecontract.Bye();
 
-var bullet = bulletTemplate.Create();
-
-var homingBullet = homingBulletTemplate.Create()
-    .Set<IThrow>(new ThrowWithTarget());
-
-
-Console.WriteLine("Hello, World!");
+obj2.Hello();
+obj2.Execute<IByeContract>();
 
 
-public interface IPosition
+
+public static class ObjectExtensions
 {
-    Vector2 Value { get; set; }
+    public static void Hello(this IObject @object)
+    {
+        var helloContract = @object.Get<IHelloContract>();
+        helloContract.Hello();
+    }
 }
 
-public class PositionInMemory : IPosition
+public interface IHelloContract
 {
-    public Vector2 Value { get; set; }
+    void Hello();
 }
-
-public interface ITarget
+public interface IByeContract
 {
+    void Bye();
 }
-
-public class Target : ITarget
+public class ByeContractImplementation : IByeContract
 {
+    public void Bye() => Console.WriteLine("Bye!");
 }
-
-public interface IThrow
+public class HelloContractImplementation : IHelloContract
 {
-}
-public class DefaultThrow : IThrow
-{
-
-}
-
-public class ThrowWithTarget : IThrow
-{
+    public void Hello() => Console.WriteLine("Hello, world!");
 }

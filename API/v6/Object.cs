@@ -308,12 +308,12 @@ public class ObjectTemplate
                     break;
                 case ObjectTemplate objectTemplate:
                     instanceContracts.Add(pair.Key, new FromObjectContractStatic(objectTemplate.Create()));
-                    break;
-                case 
+                    break; 
             }
         }
 
-        var instance = new Object(instanceContracts, this);
+        // TODO: AMOGA
+        var instance = new Object(null, this);
         return instance;
     }
 
