@@ -1,4 +1,6 @@
-namespace GMutagen.v6;
+using GMutagen.v6.IO;
+
+namespace GMutagen.v6.Values;
 
 public class ExternalValueGenerator<TId, TValue> : IGenerator<IValue<TValue>>
 {

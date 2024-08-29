@@ -1,4 +1,6 @@
-namespace GMutagen.v6;
+using GMutagen.v6.Values;
+
+namespace GMutagen.v6.IO;
 
 public static class ReadWriteExtensions
 {

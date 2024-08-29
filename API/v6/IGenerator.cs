@@ -1,3 +1,5 @@
+using GMutagen.v6.IO;
+
 namespace GMutagen.v6;
 
 public interface IGenerator<out TOut, in TIn> : IRead<TIn, TOut>

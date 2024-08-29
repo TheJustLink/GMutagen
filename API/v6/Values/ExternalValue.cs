@@ -1,4 +1,6 @@
-namespace GMutagen.v6;
+using GMutagen.v6.IO;
+
+namespace GMutagen.v6.Values;
 
 public class ExternalValue<TId, TValue> : IValue<TValue>
 {
@@ -8,7 +10,7 @@ public class ExternalValue<TId, TValue> : IValue<TValue>
 
     public ExternalValue(TId id, IReadWrite<TId, TValue> readWrite) : this(id, readWrite, readWrite)
     {
-       
+
     }
 
     public ExternalValue(TId id, IRead<TId, TValue> reader, IWrite<TId, TValue> writer)
@@ -16,7 +18,7 @@ public class ExternalValue<TId, TValue> : IValue<TValue>
         _id = id;
         _reader = reader;
         _writer = writer;
-        _writer.Write(id, default(TValue));
+        _writer.Write(id, default);
     }
 
     public TValue Value

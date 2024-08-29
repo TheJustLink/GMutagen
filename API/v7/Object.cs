@@ -5,6 +5,11 @@ using System.Reflection;
 
 namespace GMutagen.v7;
 
+public interface IValue<T>
+{
+    T Value { get; set; }
+}
+
 public static class ObjectExtensions
 {
     public static dynamic Execute<TContract>(this IObject @object, params dynamic[] parameters)

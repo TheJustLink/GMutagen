@@ -1,6 +1,8 @@
 using System.Numerics;
+using GMutagen.v6.IO;
+using GMutagen.v6.Values;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Test.Test;
 
 public class DefaultPositionGenerator : IGenerator<IPosition, ITypeRead<IGenerator<object>>>
 {

@@ -1,10 +1,11 @@
 using System.Numerics;
+using GMutagen.v6.Values;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Id;
 
 public class IncrementalGenerator<T> : IValue<T>, IGenerator<T> where T : IAdditionOperators<T, int, T>
 {
-    public IncrementalGenerator() : this(default(T))
+    public IncrementalGenerator() : this(default)
     {
     }
 

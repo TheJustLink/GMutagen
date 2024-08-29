@@ -1,4 +1,4 @@
-namespace GMutagen.v6;
+namespace GMutagen.v6.IO;
 
 public interface IWrite<in TId, in TValue>
 {

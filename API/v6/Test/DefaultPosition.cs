@@ -1,12 +1,13 @@
 using System.Numerics;
+using GMutagen.v6.Values;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Test.Test;
 
 public class DefaultPosition : IPosition
 {
     private readonly IValue<Vector2> _currentPosition;
     private readonly IValue<Vector2> _previousPosition;
-    
+
 
     public DefaultPosition(IValue<Vector2> currentPosition, IValue<Vector2> previousPosition)
     {

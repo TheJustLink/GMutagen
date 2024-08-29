@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using GMutagen.v6.IO;
+using GMutagen.v6.Values;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Test;
 
 class Test
 {
@@ -56,7 +58,7 @@ class Test
 
         ITypeRead<IGenerator<object>> universalGenerator = valueGenerators;
 
-        var positionGenerator = CreateContractGenerator<IPosition>(universalGenerator, new DefaultPositionGenerator());
+        var positionGenerator = CreateContractGenerator(universalGenerator, new DefaultPositionGenerator());
         return positionGenerator;
     }
 

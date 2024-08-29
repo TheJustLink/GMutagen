@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.IO.Repositories;
 
 public class MemoryRepository<TId, TValue> : IReadWrite<TId, TValue> where TId : notnull
 {

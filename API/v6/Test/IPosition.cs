@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Test.Test;
 
 public interface IPosition
 {

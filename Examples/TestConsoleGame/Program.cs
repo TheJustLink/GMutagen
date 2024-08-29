@@ -15,7 +15,7 @@ byecontract.Bye();
 obj2.Hello();
 obj2.Execute<IByeContract>();
 
-
+// objects:2:contracts:IHelloContract Value
 
 public static class ObjectExtensions
 {
@@ -26,6 +26,10 @@ public static class ObjectExtensions
     }
 }
 
+public interface IPosition
+{
+
+}
 public interface IHelloContract
 {
     void Hello();

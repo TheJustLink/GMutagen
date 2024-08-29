@@ -1,4 +1,4 @@
-namespace GMutagen.v6;
+namespace GMutagen.v6.Values;
 
 public class LazyValue<T> : IValue<T>
 {
