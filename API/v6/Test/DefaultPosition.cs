@@ -1,7 +1,7 @@
 using System.Numerics;
 using GMutagen.v6.Values;
 
-namespace GMutagen.v6.Test.Test;
+namespace GMutagen.v6.Test;
 
 public class DefaultPosition : IPosition
 {
