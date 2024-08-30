@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using GMutagen.v5;
+using GMutagen.v5.Container;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -35,11 +37,11 @@ public abstract class ContractStub
     public abstract bool TryGet<T>(out T contract);
 }
 
-public class FromObjectContractStub : ContractStub
+public class ConstantFromObjectContractStub : ContractStub
 {
     private readonly Object _obj;
 
-    public FromObjectContractStub(Object obj)
+    public ConstantFromObjectContractStub(Object obj)
     {
         _obj = obj;
     }
@@ -55,11 +57,11 @@ public class FromObjectContractStub : ContractStub
     }
 }
 
-public class StaticContractStub : ContractStub
+public class ConstantContractStub : ContractStub
 {
     private readonly object _contract;
 
-    public StaticContractStub(object contract)
+    public ConstantContractStub(object contract)
     {
         _contract = contract;
     }
@@ -94,6 +96,7 @@ public class Object : IObject
 
     public bool TryGet<T>(out T contract)
     {
+        // ReSharper disable once NullableWarningSuppressionIsUsed
         contract = default!;
 
         var success = _staticContracts.TryGetValue(typeof(T), out var contractStub);
@@ -101,9 +104,10 @@ public class Object : IObject
         if (!success)
             return false;
 
-        if (contractStub.TryGet(out contract))
+        // ReSharper disable once NullableWarningSuppressionIsUsed
+        if (contractStub!.TryGet(out contract))
             return true;
-        
+
         return false;
     }
 }
@@ -118,7 +122,7 @@ public class ObjectStateMachine : IObject
         _states = states;
         Index = index;
     }
-    
+
     public T Get<T>()
     {
         return _states[Index].Get<T>();
@@ -138,7 +142,7 @@ public class ObjectCompose : IObject
     {
         _objects = objects;
     }
-    
+
     public T Get<T>()
     {
         foreach (var state in _objects)
@@ -158,11 +162,11 @@ public class ObjectCompose : IObject
                 return true;
         }
 
+        // ReSharper disable once NullableWarningSuppressionIsUsed
         contract = default!;
         return false;
     }
 }
-
 
 public interface IObject
 {
@@ -170,20 +174,21 @@ public interface IObject
     bool TryGet<T>(out T contract);
 }
 
-public class DynamicContract<T> where T : class
+public class DynamicFromObjectContractStub<T> where T : class
 {
     private readonly Object _targetObject;
 
-    public DynamicContract(Object targetObject)
+    public DynamicFromObjectContractStub(Object targetObject)
     {
         _targetObject = targetObject;
     }
 
-    public static implicit operator T(DynamicContract<T> dynamicContract)
+    public static implicit operator T(DynamicFromObjectContractStub<T> dynamicFromObjectContractStub)
     {
-        if (dynamicContract._targetObject.TryGet<T>(out var contract))
+        if (dynamicFromObjectContractStub._targetObject.TryGet<T>(out var contract))
             return contract;
-        
+
+        // ReSharper disable once NullableWarningSuppressionIsUsed
         return null!;
     }
 }
@@ -210,11 +215,9 @@ public class FromObjectContractDynamic : IDynamicContract
 
     public bool TryGet<T>(out T contract)
     {
-        return Source.TryGet<T>(out contract);
+        return Source.TryGet(out contract);
     }
 }
-
-
 
 public class FromObjectContractStatic : IDynamicContract
 {
@@ -224,7 +227,7 @@ public class FromObjectContractStatic : IDynamicContract
     {
         _source = source;
     }
-    
+
     public T Get<T>()
     {
         return _source.Get<T>();
@@ -232,36 +235,31 @@ public class FromObjectContractStatic : IDynamicContract
 
     public bool TryGet<T>(out T contract)
     {
-        return _source.TryGet<T>(out contract);
+        return _source.TryGet(out contract);
     }
 }
 
 public class ObjectTemplate
 {
     private readonly HashSet<Type> _contracts;
-    private readonly Dictionary<Type, object> _dynamicContractBindings;
     private readonly ServiceCollection _serviceCollection;
+
+    // ReSharper disable once NullableWarningSuppressionIsUsed
     private IServiceProvider _serviceProvider = null!;
 
-    public ObjectTemplate() : this(new HashSet<Type>(), new ServiceCollection(), new Dictionary<Type, object>())
+    public ObjectTemplate() : this(new HashSet<Type>(), new ServiceCollection())
     {
     }
 
     public ObjectTemplate(params ObjectTemplate[] templates)
     {
-        _dynamicContractBindings = new Dictionary<Type, object>();
         _contracts = new HashSet<Type>();
         _serviceCollection = new ServiceCollection();
 
         foreach (var template in templates)
         {
             foreach (var contract in template._contracts)
-            {
-                if (_contracts.Contains(contract))
-                    continue;
-
                 _contracts.Add(contract);
-            }
 
             foreach (var service in template._serviceCollection)
             {
@@ -270,83 +268,136 @@ public class ObjectTemplate
 
                 _serviceCollection.Add(service);
             }
-
-            foreach (var pair in template._dynamicContractBindings)
-            {
-                if(!_dynamicContractBindings.TryAdd(pair.Key, pair.Value))
-                    throw new ArgumentException("Can not resolve types");
-            }
         }
     }
 
-    private ObjectTemplate(HashSet<Type> contracts, ServiceCollection serviceCollection, Dictionary<Type, object> dynamicContractBindings)
+    private ObjectTemplate(HashSet<Type> contracts, ServiceCollection serviceCollection)
     {
         _contracts = contracts;
         _serviceCollection = serviceCollection;
-        _dynamicContractBindings = dynamicContractBindings;
     }
 
     public Object Create()
     {
+        // ReSharper disable once NullableWarningSuppressionIsUsed
         if (_serviceProvider == null!)
             _serviceProvider = _serviceCollection.BuildServiceProvider();
 
-        var instanceContracts = new Dictionary<Type, object>();
+        var instanceContracts = new Dictionary<Type, ContractStub>();
 
         foreach (var contractType in _contracts)
-            instanceContracts.Add(contractType, _serviceProvider.GetRequiredService(contractType));
-
-        foreach (var pair in _dynamicContractBindings)
         {
-            var value = _dynamicContractBindings[pair.Key];
-            
-            switch (value)
-            {
-                case Object obj:
-                    instanceContracts.Add(pair.Key, new FromObjectContractStatic(obj));
-                    break;
-                case ObjectTemplate objectTemplate:
-                    instanceContracts.Add(pair.Key, new FromObjectContractStatic(objectTemplate.Create()));
-                    break; 
-            }
+            var stub = new ConstantContractStub(_serviceProvider.GetRequiredService(contractType));
+            instanceContracts.Add(contractType, stub);
         }
 
-        // TODO: AMOGA
-        var instance = new Object(null, this);
+        var instance = new Object(instanceContracts, this);
         return instance;
     }
 
-    public ObjectTemplate AddFromObject<TInterface>(Object obj) where TInterface : class
+    public ObjectTemplate AddFromResolutionWithConstructor<TInterface, TType>()
+        where TType : class, TInterface where TInterface : class
     {
-        _dynamicContractBindings[typeof(TInterface)] = obj;
+        return AddFromResolutionWithConstructor<TInterface, TType>(this);
+    }
+
+    public ObjectTemplate AddFromResolutionWithConstructor<TInterface, TType>(ObjectTemplate key)
+        where TType : class, TInterface where TInterface : class
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (serviceProvider, resolveKey) =>
+        {
+            var instance = default(TType);
+            foreach (var constructor in typeof(TType).GetConstructors())
+            {
+                foreach (var constructorAttribute in constructor.GetCustomAttributes(true))
+                {
+                    if (constructorAttribute is not Inject)
+                        continue;
+
+                    var parameters = constructor.GetParameters();
+                    var resultParameters = new object[parameters.Length];
+                    for (int i = 0; i < parameters.Length; i++)
+                    {
+                        var parameter = parameters[i];
+                        var id = 0;
+                        foreach (var parameterAttribute in parameter.GetCustomAttributes(true))
+                        {
+                            if (parameterAttribute is not IdAttribute idAttribute) 
+                                continue;
+
+                            id = idAttribute.Id;
+                        }
+
+                        if (id == 0)
+                            throw new Exception();
+                        
+                        resultParameters[i] = serviceProvider.GetRequiredKeyedService(parameter.ParameterType, id);
+                    }
+
+                    // ReSharper disable once CoVariantArrayConversion
+                    constructor.Invoke(instance, parameters);
+                    // ReSharper disable once NullableWarningSuppressionIsUsed
+                    return instance!;
+                }
+            }
+
+            throw new Exception("Constructor with InjectAttribute was not found");
+        });
+        
         return this;
     }
-    public ObjectTemplate AddFromObject<TInterface>(FromObjectContractStatic binding) where TInterface : class
+
+    public ObjectTemplate AddFromAnotherKey<TInterface>(ObjectTemplate key) where TInterface : class
     {
-        _dynamicContractBindings[typeof(TInterface)] = binding;
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), this,
+                                             (serviceProvider, _) =>
+                                                 serviceProvider.GetRequiredKeyedService<TInterface>(key));
         return this;
     }
-    public ObjectTemplate AddFromObject<TInterface>(FromObjectContractDynamic binding) where TInterface : class
+
+    public ObjectTemplate AddFromAnotherKey<TInterface, TType>(ObjectTemplate key)
+        where TType : class, TInterface where TInterface : class
     {
-        _dynamicContractBindings[typeof(TInterface)] = binding;
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), this,
+                                             (serviceProvider, _) =>
+                                                 serviceProvider.GetRequiredKeyedService<TType>(key));
         return this;
     }
-    
-    public ObjectTemplate AddFromObjectOf<TInterface>(ObjectTemplate template) where TInterface : class
+
+    public ObjectTemplate AddFromAnotherTemplate<TInterface>(ObjectTemplate template) where TInterface : class
     {
-        _dynamicContractBindings[typeof(TInterface)] = template;
+        return AddFromAnotherTemplate<TInterface>(template, this);
+    }
+
+    public ObjectTemplate AddFromAnotherTemplate<TInterface, TType>(ObjectTemplate template)
+        where TType : class, TInterface where TInterface : class
+    {
+        return AddFromAnotherTemplate<TInterface, TType>(template, this);
+    }
+
+    public ObjectTemplate AddFromAnotherTemplate<TInterface>(ObjectTemplate template, ObjectTemplate key)
+        where TInterface : class
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (_, _) => template.Create().Get<TInterface>());
         return this;
     }
-    
+
+    public ObjectTemplate AddFromAnotherTemplate<TInterface, TType>(ObjectTemplate template, ObjectTemplate key)
+        where TType : class, TInterface where TInterface : class
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (_, _) => template.Create().Get<TType>());
+        return this;
+    }
+
     public ObjectTemplate Add<TInterface, TType>() where TType : class, TInterface where TInterface : class
     {
-        _serviceCollection.AddTransient<TInterface, TType>();
+        _serviceCollection.AddKeyedTransient<TInterface, TType>(this);
         return this;
     }
 
     public ObjectTemplate Add<TType>() where TType : class
     {
-        _serviceCollection.AddTransient<TType>();
+        _serviceCollection.AddKeyedTransient<TType>(this);
         return this;
     }
 
@@ -359,7 +410,25 @@ public class ObjectTemplate
                 continue;
 
             var newService = new ServiceDescriptor(typeof(TInterface), service.ServiceKey, typeof(TType),
-                ServiceLifetime.Transient);
+                                                   ServiceLifetime.Transient);
+
+            _serviceCollection[i] = newService;
+        }
+
+        return this;
+    }
+
+    public ObjectTemplate Set<TInterface, TType>(ObjectTemplate key)
+        where TType : class, TInterface where TInterface : class
+    {
+        for (int i = 0; i < _serviceCollection.Count; i++)
+        {
+            var service = _serviceCollection[i];
+            if (service.ServiceType != typeof(TInterface) || service.ServiceKey != key)
+                continue;
+
+            var newService = new ServiceDescriptor(typeof(TInterface), service.ServiceKey, typeof(TType),
+                                                   ServiceLifetime.Transient);
 
             _serviceCollection[i] = newService;
         }
