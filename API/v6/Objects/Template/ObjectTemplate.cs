@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using GMutagen.v5;
 using GMutagen.v5.Container;
+using GMutagen.v6.Objects.Stubs;
+using GMutagen.v6.Objects.Stubs.Implementation;
+using GMutagen.v6.Objects.Template.Decsriptor;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Objects.Template;
 
 public class ObjectTemplate
 {

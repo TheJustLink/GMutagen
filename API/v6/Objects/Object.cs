@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using GMutagen.v6.Objects.Interface;
+using GMutagen.v6.Objects.Stubs;
+using GMutagen.v6.Objects.Template;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Objects;
 
 public class GeneratorDecorator<TIn, TOut> : IGenerator<TOut>
 {

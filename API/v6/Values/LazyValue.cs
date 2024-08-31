@@ -1,3 +1,5 @@
+using GMutagen.v6.Objects;
+
 namespace GMutagen.v6.Values;
 
 public class LazyValue<T> : IValue<T>

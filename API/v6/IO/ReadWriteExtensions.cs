@@ -1,3 +1,4 @@
+using GMutagen.v6.Objects;
 using GMutagen.v6.Values;
 
 namespace GMutagen.v6.IO;

@@ -1,6 +1,7 @@
 using System;
+using GMutagen.v6.Objects.Interface;
 
-namespace GMutagen.v6;
+namespace GMutagen.v6.Objects.Composite;
 
 public class ObjectCompose : IObject
 {

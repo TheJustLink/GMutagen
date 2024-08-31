@@ -1,4 +1,6 @@
-namespace GMutagen.v6;
+using GMutagen.v6.Objects.Interface;
+
+namespace GMutagen.v6.Objects.Composite.StateMachine;
 
 public class ObjectStateMachine : IObject
 {

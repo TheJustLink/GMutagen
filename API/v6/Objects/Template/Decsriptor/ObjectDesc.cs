@@ -1,4 +1,4 @@
-namespace GMutagen.v6;
+namespace GMutagen.v6.Objects.Template.Decsriptor;
 
 public class ObjectDesc
 {

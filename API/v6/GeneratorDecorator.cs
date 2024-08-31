@@ -1,3 +1,5 @@
+using GMutagen.v6.Objects;
+
 namespace GMutagen.v6;
 
 public class GeneratorDecorator<T> : GeneratorDecorator<T, T>
