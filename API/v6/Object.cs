@@ -81,6 +81,7 @@ public class ConstantContractStub : ContractStub
 public class Object : IObject
 {
     private readonly Dictionary<Type, ContractStub> _staticContracts;
+
     // ReSharper disable once NotAccessedField.Local
     private readonly ObjectTemplate _template;
 
@@ -247,8 +248,10 @@ public class ObjectTemplate
 
     // ReSharper disable once NullableWarningSuppressionIsUsed
     private IServiceProvider _serviceProvider = null!;
+
     // ReSharper disable once NullableWarningSuppressionIsUsed
     private Dictionary<ObjectDesc, ObjectTemplate> _pairs;
+    // ReSharper disable once NullableWarningSuppressionIsUsed
     private Dictionary<ObjectDesc, Object> _objects = null!;
     private int _id;
 
@@ -258,6 +261,8 @@ public class ObjectTemplate
 
     public ObjectTemplate(params ObjectTemplate[] templates)
     {
+        _id = 0;
+        _pairs = new Dictionary<ObjectDesc, ObjectTemplate>();
         _contracts = new HashSet<Type>();
         _serviceCollection = new ServiceCollection();
 
@@ -290,7 +295,7 @@ public class ObjectTemplate
         _objects = new Dictionary<ObjectDesc, Object>();
         foreach (var pair in _pairs)
             _objects[pair.Key] = pair.Value.Create();
-        
+
         // ReSharper disable once NullableWarningSuppressionIsUsed
         if (_serviceProvider == null!)
             _serviceProvider = _serviceCollection.BuildServiceProvider();
@@ -307,11 +312,22 @@ public class ObjectTemplate
         return instance;
     }
 
+    public ObjectTemplate AddFromObject<TType>(ObjectDesc objectDesc) =>
+        AddFromObject<TType, TType>(objectDesc, this);
+
+    public ObjectTemplate AddFromObject<TType>(ObjectDesc objectDesc, ObjectTemplate key) =>
+        AddFromObject<TType, TType>(objectDesc, key);
+
+    public ObjectTemplate AddFromObject<TInterface, TType>(ObjectDesc objectDesc) =>
+         AddFromObject<TInterface, TType>(objectDesc, this);
+    
+
     public ObjectTemplate AddFromObject<TInterface, TType>(ObjectDesc objectDesc, ObjectTemplate key)
     {
-        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (s, u) =>
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (_, _) =>
         {
             if (_objects.TryGetValue(objectDesc, out var obj))
+                // ReSharper disable once NullableWarningSuppressionIsUsed
                 return obj.Get<TType>()!;
 
             throw new Exception();
@@ -322,16 +338,15 @@ public class ObjectTemplate
 
     public ObjectTemplate AddObject(ObjectTemplate template, out ObjectDesc objectDesc)
     {
-        objectDesc = new ObjectDesc();
+        objectDesc = new ObjectDesc(_id++);
         _pairs.Add(objectDesc, template);
         return this;
     }
 
-    public ObjectTemplate AddFromResolutionWithConstructor<TInterface, TType>()
-        where TType : class, TInterface where TInterface : class
-    {
-        return AddFromResolutionWithConstructor<TInterface, TType>(this);
-    }
+    public ObjectTemplate AddFromResolutionWithConstructor<TInterface, TType>() 
+        where TType : class, TInterface where TInterface : class =>
+         AddFromResolutionWithConstructor<TInterface, TType>(this);
+    
 
     public ObjectTemplate AddFromResolutionWithConstructor<TInterface, TType>(ObjectTemplate key)
         where TType : class, TInterface where TInterface : class
@@ -379,10 +394,9 @@ public class ObjectTemplate
         return this;
     }
 
-    public ObjectTemplate AddFromAnotherKey<TInterface>(ObjectTemplate key) where TInterface : class
-    {
-        return AddFromAnotherKey<TInterface, TInterface>(key);
-    }
+    public ObjectTemplate AddFromAnotherKey<TInterface>(ObjectTemplate key) where TInterface : class =>
+         AddFromAnotherKey<TInterface, TInterface>(key);
+    
 
     public ObjectTemplate AddFromAnotherKey<TInterface, TType>(ObjectTemplate key)
         where TType : class, TInterface where TInterface : class
@@ -393,22 +407,19 @@ public class ObjectTemplate
         return this;
     }
 
-    public ObjectTemplate AddFromAnotherTemplate<TInterface>(ObjectTemplate template) where TInterface : class
-    {
-        return AddFromAnotherTemplate<TInterface>(template, this);
-    }
+    public ObjectTemplate AddFromAnotherTemplate<TInterface>(ObjectTemplate template) where TInterface : class =>
+         AddFromAnotherTemplate<TInterface>(template, this);
+    
 
     public ObjectTemplate AddFromAnotherTemplate<TInterface, TType>(ObjectTemplate template)
-        where TType : class, TInterface where TInterface : class
-    {
-        return AddFromAnotherTemplate<TInterface, TType>(template, this);
-    }
+        where TType : class, TInterface where TInterface : class =>
+         AddFromAnotherTemplate<TInterface, TType>(template, this);
+    
 
     public ObjectTemplate AddFromAnotherTemplate<TInterface>(ObjectTemplate template, ObjectTemplate key)
-        where TInterface : class
-    {
-        return AddFromAnotherTemplate<TInterface, TInterface>(template, key);
-    }
+        where TInterface : class =>
+        AddFromAnotherTemplate<TInterface, TInterface>(template, key);
+    
 
     public ObjectTemplate AddFromAnotherTemplate<TInterface, TType>(ObjectTemplate template, ObjectTemplate key)
         where TType : class, TInterface where TInterface : class
@@ -467,10 +478,10 @@ public class ObjectTemplate
 
 public class Pair<T, T1>
 {
-    public ObjectDesc First { get; }
+    public T First { get; }
     public T1 Second { get; }
 
-    public Pair(ObjectDesc first, T1 second)
+    public Pair(T first, T1 second)
     {
         First = first;
         Second = second;
