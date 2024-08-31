@@ -81,6 +81,7 @@ public class ConstantContractStub : ContractStub
 public class Object : IObject
 {
     private readonly Dictionary<Type, ContractStub> _staticContracts;
+    // ReSharper disable once NotAccessedField.Local
     private readonly ObjectTemplate _template;
 
     public Object(Dictionary<Type, ContractStub> staticContracts, ObjectTemplate template)
@@ -130,7 +131,7 @@ public class ObjectStateMachine : IObject
 
     public bool TryGet<T>(out T contract)
     {
-        return _states[Index].TryGet<T>(out contract);
+        return _states[Index].TryGet(out contract);
     }
 }
 
@@ -158,7 +159,7 @@ public class ObjectCompose : IObject
     {
         foreach (var state in _objects)
         {
-            if (state.TryGet<T>(out contract))
+            if (state.TryGet(out contract))
                 return true;
         }
 
@@ -246,6 +247,10 @@ public class ObjectTemplate
 
     // ReSharper disable once NullableWarningSuppressionIsUsed
     private IServiceProvider _serviceProvider = null!;
+    // ReSharper disable once NullableWarningSuppressionIsUsed
+    private Dictionary<ObjectDesc, ObjectTemplate> _pairs;
+    private Dictionary<ObjectDesc, Object> _objects = null!;
+    private int _id;
 
     public ObjectTemplate() : this(new HashSet<Type>(), new ServiceCollection())
     {
@@ -275,10 +280,17 @@ public class ObjectTemplate
     {
         _contracts = contracts;
         _serviceCollection = serviceCollection;
+        _id = 0;
+        _pairs = new Dictionary<ObjectDesc, ObjectTemplate>();
     }
 
     public Object Create()
     {
+        // ReSharper disable once NullableWarningSuppressionIsUsed
+        _objects = new Dictionary<ObjectDesc, Object>();
+        foreach (var pair in _pairs)
+            _objects[pair.Key] = pair.Value.Create();
+        
         // ReSharper disable once NullableWarningSuppressionIsUsed
         if (_serviceProvider == null!)
             _serviceProvider = _serviceCollection.BuildServiceProvider();
@@ -287,12 +299,32 @@ public class ObjectTemplate
 
         foreach (var contractType in _contracts)
         {
-            var stub = new ConstantContractStub(_serviceProvider.GetRequiredService(contractType));
+            var stub = new ConstantContractStub(_serviceProvider.GetRequiredKeyedService(contractType, this));
             instanceContracts.Add(contractType, stub);
         }
 
         var instance = new Object(instanceContracts, this);
         return instance;
+    }
+
+    public ObjectTemplate AddFromObject<TInterface, TType>(ObjectDesc objectDesc, ObjectTemplate key)
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (s, u) =>
+        {
+            if (_objects.TryGetValue(objectDesc, out var obj))
+                return obj.Get<TType>()!;
+
+            throw new Exception();
+        });
+
+        return this;
+    }
+
+    public ObjectTemplate AddObject(ObjectTemplate template, out ObjectDesc objectDesc)
+    {
+        objectDesc = new ObjectDesc();
+        _pairs.Add(objectDesc, template);
+        return this;
     }
 
     public ObjectTemplate AddFromResolutionWithConstructor<TInterface, TType>()
@@ -304,7 +336,7 @@ public class ObjectTemplate
     public ObjectTemplate AddFromResolutionWithConstructor<TInterface, TType>(ObjectTemplate key)
         where TType : class, TInterface where TInterface : class
     {
-        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (serviceProvider, resolveKey) =>
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (serviceProvider, _) =>
         {
             var instance = default(TType);
             foreach (var constructor in typeof(TType).GetConstructors())
@@ -322,7 +354,7 @@ public class ObjectTemplate
                         var id = 0;
                         foreach (var parameterAttribute in parameter.GetCustomAttributes(true))
                         {
-                            if (parameterAttribute is not IdAttribute idAttribute) 
+                            if (parameterAttribute is not IdAttribute idAttribute)
                                 continue;
 
                             id = idAttribute.Id;
@@ -330,7 +362,7 @@ public class ObjectTemplate
 
                         if (id == 0)
                             throw new Exception();
-                        
+
                         resultParameters[i] = serviceProvider.GetRequiredKeyedService(parameter.ParameterType, id);
                     }
 
@@ -343,16 +375,13 @@ public class ObjectTemplate
 
             throw new Exception("Constructor with InjectAttribute was not found");
         });
-        
+
         return this;
     }
 
     public ObjectTemplate AddFromAnotherKey<TInterface>(ObjectTemplate key) where TInterface : class
     {
-        _serviceCollection.AddKeyedTransient(typeof(TInterface), this,
-                                             (serviceProvider, _) =>
-                                                 serviceProvider.GetRequiredKeyedService<TInterface>(key));
-        return this;
+        return AddFromAnotherKey<TInterface, TInterface>(key);
     }
 
     public ObjectTemplate AddFromAnotherKey<TInterface, TType>(ObjectTemplate key)
@@ -378,8 +407,7 @@ public class ObjectTemplate
     public ObjectTemplate AddFromAnotherTemplate<TInterface>(ObjectTemplate template, ObjectTemplate key)
         where TInterface : class
     {
-        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (_, _) => template.Create().Get<TInterface>());
-        return this;
+        return AddFromAnotherTemplate<TInterface, TInterface>(template, key);
     }
 
     public ObjectTemplate AddFromAnotherTemplate<TInterface, TType>(ObjectTemplate template, ObjectTemplate key)
@@ -434,5 +462,43 @@ public class ObjectTemplate
         }
 
         return this;
+    }
+}
+
+public class Pair<T, T1>
+{
+    public ObjectDesc First { get; }
+    public T1 Second { get; }
+
+    public Pair(ObjectDesc first, T1 second)
+    {
+        First = first;
+        Second = second;
+    }
+}
+
+public class ObjectDesc
+{
+    public int Index;
+
+    public ObjectDesc()
+    {
+        Index = int.MinValue;
+    }
+
+    public ObjectDesc(int index)
+    {
+        Index = index;
+    }
+}
+
+public class IntValue : IValue<int>
+{
+    private int _value;
+
+    public int Value
+    {
+        get => _value;
+        set => _value = value;
     }
 }
