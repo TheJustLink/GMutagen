@@ -24,13 +24,15 @@ public class ObjectTemplate
     // ReSharper disable once NullableWarningSuppressionIsUsed
     private Dictionary<ObjectDesc, Object> _objects = null!;
     private int _id;
+    private bool _addRelatedObjectsContract;
 
-    public ObjectTemplate() : this(new HashSet<Type>(), new ServiceCollection())
+    public ObjectTemplate() : this(new HashSet<Type>(), new ServiceCollection(), false)
     {
     }
 
-    public ObjectTemplate(params ObjectTemplate[] templates)
+    public ObjectTemplate(bool addRelatedObjectsContract = false, params ObjectTemplate[] templates)
     {
+        _addRelatedObjectsContract = addRelatedObjectsContract;
         _id = 0;
         _pairs = new Dictionary<ObjectDesc, ObjectTemplate>();
         _contracts = new HashSet<Type>();
@@ -51,10 +53,11 @@ public class ObjectTemplate
         }
     }
 
-    private ObjectTemplate(HashSet<Type> contracts, ServiceCollection serviceCollection)
+    private ObjectTemplate(HashSet<Type> contracts, ServiceCollection serviceCollection, bool addRelatedObjectsContract = false)
     {
         _contracts = contracts;
         _serviceCollection = serviceCollection;
+        _addRelatedObjectsContract = addRelatedObjectsContract;
         _id = 0;
         _pairs = new Dictionary<ObjectDesc, ObjectTemplate>();
     }
@@ -78,9 +81,51 @@ public class ObjectTemplate
             instanceContracts.Add(contractType, stub);
         }
 
+        if (_addRelatedObjectsContract)
+            instanceContracts[typeof(RelatedObjectStorage)] = new ConstantContractStub(new RelatedObjectStorage(_objects));
+
         var instance = new Object(instanceContracts, this);
         return instance;
     }
+    
+    public FromObjectsSection AddFromObjectsSection(ObjectDesc[] objectDesc) =>
+        new FromObjectsSection(objectDesc, _objects, _serviceCollection, this);
+    
+    public ObjectTemplate AddFromObjects<TType>(params ObjectDesc[] objectDescs) =>
+        AddFromObjects<TType, TType>(this, objectDescs);
+
+    public ObjectTemplate AddFromObjects<TType>(ObjectTemplate key, params ObjectDesc[] objectDescs) =>
+        AddFromObjects<TType, TType>(key, objectDescs);
+
+    public ObjectTemplate AddFromObjects<TInterface, TType>(params ObjectDesc[] objectDescs) =>
+        AddFromObjects<TInterface, TType>(this, objectDescs);
+
+    public ObjectTemplate AddFromObjects<TInterface, TType>(ObjectTemplate key, params ObjectDesc[] objectDescs)
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface[]), key, (_, _) =>
+        {
+            var count = objectDescs.Length;
+            var contracts = new TType[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                var objectDesc = objectDescs[i];
+
+                if (_objects.TryGetValue(objectDesc, out var obj))
+                    // ReSharper disable once NullableWarningSuppressionIsUsed
+                    contracts[i] = obj.Get<TType>()!;
+            }
+
+
+            throw new Exception();
+        });
+
+        return this;
+    }
+
+    public FromObjectSection AddFromObjectSection(ObjectDesc objectDesc) =>
+         new FromObjectSection(objectDesc, _objects, _serviceCollection, this);
+    
 
     public ObjectTemplate AddFromObject<TType>(ObjectDesc objectDesc) =>
         AddFromObject<TType, TType>(objectDesc, this);
@@ -91,7 +136,6 @@ public class ObjectTemplate
     public ObjectTemplate AddFromObject<TInterface, TType>(ObjectDesc objectDesc) =>
         AddFromObject<TInterface, TType>(objectDesc, this);
     
-
     public ObjectTemplate AddFromObject<TInterface, TType>(ObjectDesc objectDesc, ObjectTemplate key)
     {
         _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (_, _) =>
@@ -110,6 +154,22 @@ public class ObjectTemplate
     {
         objectDesc = new ObjectDesc(_id++);
         _pairs.Add(objectDesc, template);
+        return this;
+    }
+    
+    public ObjectTemplate AddObjects(out ObjectDesc[] objectDescs, params ObjectTemplate[] templates)
+    {
+        var count = templates.Length;
+        objectDescs = new ObjectDesc[count];
+        for (int i = 0; i < count; i++)
+        {
+            var template = templates[i];
+            var objectDesc = new ObjectDesc(_id++);
+            objectDescs[i] = objectDesc;
+
+            _pairs.Add(objectDesc, template);
+        }
+
         return this;
     }
 
@@ -244,4 +304,107 @@ public class ObjectTemplate
 
         return this;
     }
+}
+
+public class FromObjectSection
+{
+    private readonly IServiceCollection _serviceCollection;
+    private readonly ObjectDesc _objectDesc;
+    private readonly Dictionary<ObjectDesc, Object> _objects;
+    private ObjectTemplate _key;
+
+    public FromObjectSection(ObjectDesc objectDesc, Dictionary<ObjectDesc,Object> objects, IServiceCollection serviceCollection, ObjectTemplate key)
+    {
+        _objectDesc = objectDesc;
+        _objects = objects;
+        _serviceCollection = serviceCollection;
+        _key = key;
+    }
+    
+    public FromObjectSection AddFromObject<TType>() =>
+        AddFromObject<TType, TType>(_key);
+
+    public FromObjectSection AddFromObject<TType>(ObjectTemplate key) =>
+        AddFromObject<TType, TType>(key);
+
+    public FromObjectSection AddFromObject<TInterface, TType>() =>
+        AddFromObject<TInterface, TType>(_key);
+
+    public FromObjectSection AddFromObject<TInterface, TType>(ObjectTemplate key)
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (_, _) =>
+        {
+            if (_objects.TryGetValue(_objectDesc, out var obj))
+                // ReSharper disable once NullableWarningSuppressionIsUsed
+                return obj.Get<TType>()!;
+
+            throw new Exception();
+        });
+
+        return this;
+    }
+
+    public ObjectTemplate End() => _key;
+}
+
+public class FromObjectsSection
+{
+    private readonly IServiceCollection _serviceCollection;
+    private readonly ObjectDesc[] _objectDescs;
+    private readonly Dictionary<ObjectDesc, Object> _objects;
+    private ObjectTemplate _key;
+
+    public FromObjectsSection(ObjectDesc[] objectDescs, Dictionary<ObjectDesc,Object> objects, IServiceCollection serviceCollection, ObjectTemplate key)
+    {
+        _objectDescs = objectDescs;
+        _objects = objects;
+        _serviceCollection = serviceCollection;
+        _key = key;
+    }
+    
+    public FromObjectsSection AddFromObjects<TType>() =>
+        AddFromObjects<TType, TType>(_key);
+
+    public FromObjectsSection AddFromObjects<TType>(ObjectTemplate key) =>
+        AddFromObjects<TType, TType>(key);
+
+    public FromObjectsSection AddFromObjects<TInterface, TType>() =>
+        AddFromObjects<TInterface, TType>(_key);
+
+    public FromObjectsSection AddFromObjects<TInterface, TType>(ObjectTemplate key)
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface[]), key, (_, _) =>
+        {
+            var count = _objectDescs.Length;
+            var contracts = new TType[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                var objectDesc = _objectDescs[i];
+
+                if (_objects.TryGetValue(objectDesc, out var obj))
+                    // ReSharper disable once NullableWarningSuppressionIsUsed
+                    contracts[i] = obj.Get<TType>()!;
+            }
+
+
+            throw new Exception();
+        });
+
+        return this;
+    }
+
+    public ObjectTemplate End() => _key;
+}
+
+public class RelatedObjectStorage
+{
+    private readonly Dictionary<ObjectDesc, Object> _relatedObjects;
+
+    public RelatedObjectStorage(Dictionary<ObjectDesc, Object> relatedObjects)
+    {
+        _relatedObjects = relatedObjects;
+    }
+
+    public Object this[ObjectDesc desc] => _relatedObjects[desc];
 }
