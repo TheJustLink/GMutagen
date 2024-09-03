@@ -150,6 +150,21 @@ public class ObjectTemplate
         return this;
     }
 
+
+    public FromObjectSection AddObjectSection(ObjectTemplate template, out ObjectDesc objectDesc)
+    {
+        objectDesc = new ObjectDesc(_id++);
+        _pairs.Add(objectDesc, template);
+        return new FromObjectSection(objectDesc, _objects, _serviceCollection, this);
+    }
+
+    public FromObjectSection AddObjectSection(ObjectTemplate template)
+    {
+        var objectDesc = new ObjectDesc(_id++);
+        _pairs.Add(objectDesc, template);
+        return new FromObjectSection(objectDesc, _objects, _serviceCollection, this);
+    }
+
     public ObjectTemplate AddObject(ObjectTemplate template, out ObjectDesc objectDesc)
     {
         objectDesc = new ObjectDesc(_id++);

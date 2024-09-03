@@ -1,28 +1,82 @@
 ﻿using System;
 using System.Collections.Generic;
+using GMutagen.v6.IO;
 using GMutagen.v6.Objects.Interface;
 using GMutagen.v6.Objects.Stubs;
 using GMutagen.v6.Objects.Template;
 
 namespace GMutagen.v6.Objects;
 
-public class GeneratorDecorator<TIn, TOut> : IGenerator<TOut>
-{
-    private readonly IGenerator<TIn> _sourceGenerator;
-    private readonly IGenerator<TOut, IGenerator<TIn>> _proxyGenerator;
-
-    protected GeneratorDecorator(IGenerator<TIn> sourceGenerator, IGenerator<TOut, IGenerator<TIn>> proxyGenerator)
-    {
-        _sourceGenerator = sourceGenerator;
-        _proxyGenerator = proxyGenerator;
-    }
-
-    public TOut Generate() => _proxyGenerator.Generate(_sourceGenerator);
-}
-
 public interface IGenerator<out T>
 {
     T Generate();
+}
+
+public interface IGenerator<out TOut, in TIn> : IRead<TIn, TOut>
+{
+    TOut Generate(TIn input);
+}
+
+public abstract class GeneratorDecorator<T> : IGenerator<T>
+{
+    protected IGenerator<T> Child;
+
+    public GeneratorDecorator(IGenerator<T> child)
+    {
+        Child = child;
+    }
+
+    public virtual T Generate()
+    {
+        return Child.Generate();
+    }
+}
+
+public class GeneratorAdapter<TResult, TId> : IGenerator<TResult, TId>
+{
+    protected readonly IGenerator<TResult> Child;
+
+    public GeneratorAdapter(IGenerator<TResult> child)
+    {
+        Child = child;
+    }
+
+    public TResult this[TId id] => Read(id);
+
+    public virtual TResult Read(TId id)
+    {
+        return this[id];
+    }
+
+    public virtual TResult Generate(TId input)
+    {
+        return Child.Generate();
+    }
+}
+
+public class GeneratorAdapter2<TResult, TId> : IGenerator<TResult>
+{
+    protected readonly IGenerator<TId> IdGenerator;
+    protected readonly IGenerator<TResult, TId> Child;
+
+    public GeneratorAdapter2(IGenerator<TResult, TId> child, IGenerator<TId> idGenerator)
+    {
+        Child = child;
+        IdGenerator = idGenerator;
+    }
+
+    public TResult this[TId id] => Read(id);
+
+    public virtual TResult Read(TId id)
+    {
+        return this[id];
+    }
+
+    public virtual TResult Generate()
+    {
+        var id = IdGenerator.Generate();
+        return Child.Generate(id);
+    }
 }
 
 public class Object : IObject
