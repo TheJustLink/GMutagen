@@ -17,7 +17,6 @@ static class Program
 
         var rabbitTemplate = new ObjectTemplate()
             .AddFromAnotherTemplate<IPosition>(defaultPositionTemplate);
-            
 
 
         var rabbit = rabbitTemplate.Create();

@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using GMutagen.v6.IO;
-using GMutagen.v6.Objects.Interface;
-using GMutagen.v6.Objects.Stubs;
-using GMutagen.v6.Objects.Template;
 
-namespace GMutagen.v6.Objects;
+using GMutagen.v8.IO;
+using GMutagen.v8.Objects.Interface;
+using GMutagen.v8.Objects.Stubs;
+using GMutagen.v8.Objects.Template;
+
+namespace GMutagen.v8.Objects;
 
 public interface IGenerator<out T>
 {
