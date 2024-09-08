@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using GMutagen.v5;
-using GMutagen.v5.Container;
+
 using GMutagen.v6.Objects.Stubs;
 using GMutagen.v6.Objects.Stubs.Implementation;
 using GMutagen.v6.Objects.Template.Decsriptor;
+using GMutagen.v6.Values;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -87,9 +88,20 @@ public class ObjectTemplate
         var instance = new Object(instanceContracts, this);
         return instance;
     }
-    
+
+    public ObjectTemplate AddFromGenerator<TInterface>(IGenerator<TInterface> generator) 
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TInterface), this, (_, _) => 
+        {
+            return generator.Generate();
+        });
+        _contracts.Add(typeof(TInterface));
+        return this;
+    }
+
+
     public FromObjectsSection AddFromObjectsSection(ObjectDesc[] objectDesc) =>
-        new FromObjectsSection(objectDesc, _objects, _serviceCollection, this);
+        new FromObjectsSection(objectDesc, _objects, _serviceCollection, this, _contracts);
     
     public ObjectTemplate AddFromObjects<TType>(params ObjectDesc[] objectDescs) =>
         AddFromObjects<TType, TType>(this, objectDescs);
@@ -119,12 +131,13 @@ public class ObjectTemplate
 
             throw new Exception();
         });
+        _contracts.Add(typeof(TInterface[]));
 
         return this;
     }
 
     public FromObjectSection AddFromObjectSection(ObjectDesc objectDesc) =>
-         new FromObjectSection(objectDesc, _objects, _serviceCollection, this);
+         new FromObjectSection(objectDesc, _objects, _serviceCollection, this, _contracts);
     
 
     public ObjectTemplate AddFromObject<TType>(ObjectDesc objectDesc) =>
@@ -146,23 +159,45 @@ public class ObjectTemplate
 
             throw new Exception();
         });
+        _contracts.Add(typeof(TInterface));
 
         return this;
     }
 
 
+    public FromObjectSection AddObjectSection(ObjectTemplate template) => 
+        AddObjectSection(template, out var desc);
+
     public FromObjectSection AddObjectSection(ObjectTemplate template, out ObjectDesc objectDesc)
     {
         objectDesc = new ObjectDesc(_id++);
         _pairs.Add(objectDesc, template);
-        return new FromObjectSection(objectDesc, _objects, _serviceCollection, this);
+        return new FromObjectSection(objectDesc, _objects, _serviceCollection, this, _contracts);
     }
 
-    public FromObjectSection AddObjectSection(ObjectTemplate template)
+    public FromObjectsSection AddObjectsSection(out ObjectDesc[] objectDescs, params ObjectTemplate[] templates) =>
+         AddObjectsSection(out objectDescs, this, templates);
+
+    public FromObjectsSection AddObjectsSection(params ObjectTemplate[] templates) =>
+         AddObjectsSection(out _, this, templates);
+
+    public FromObjectsSection AddObjectsSection(ObjectTemplate key, params ObjectTemplate[] templates) =>
+         AddObjectsSection(out _, key, templates);
+
+    public FromObjectsSection AddObjectsSection(out ObjectDesc[] objectDescs, ObjectTemplate key, params ObjectTemplate[] templates)
     {
-        var objectDesc = new ObjectDesc(_id++);
-        _pairs.Add(objectDesc, template);
-        return new FromObjectSection(objectDesc, _objects, _serviceCollection, this);
+        var count = templates.Length;
+        objectDescs = new ObjectDesc[count];
+        for (int i = 0; i < count; i++)
+        {
+            var template = templates[i];
+            var objectDesc = new ObjectDesc(_id++);
+            objectDescs[i] = objectDesc;
+
+            _pairs.Add(objectDesc, template);
+        }
+
+        return new FromObjectsSection(objectDescs, _objects, _serviceCollection, key, _contracts);
     }
 
     public ObjectTemplate AddObject(ObjectTemplate template, out ObjectDesc objectDesc)
@@ -203,7 +238,7 @@ public class ObjectTemplate
             {
                 foreach (var constructorAttribute in constructor.GetCustomAttributes(true))
                 {
-                    if (constructorAttribute is not Inject)
+                    if (constructorAttribute is not InjectAttribute)
                         continue;
 
                     var parameters = constructor.GetParameters();
@@ -235,6 +270,7 @@ public class ObjectTemplate
 
             throw new Exception("Constructor with InjectAttribute was not found");
         });
+        _contracts.Add(typeof(TInterface));
 
         return this;
     }
@@ -249,6 +285,7 @@ public class ObjectTemplate
         _serviceCollection.AddKeyedTransient(typeof(TInterface), this,
                                              (serviceProvider, _) =>
                                                  serviceProvider.GetRequiredKeyedService<TType>(key));
+        _contracts.Add(typeof(TInterface));
         return this;
     }
 
@@ -270,18 +307,21 @@ public class ObjectTemplate
         where TType : class, TInterface where TInterface : class
     {
         _serviceCollection.AddKeyedTransient(typeof(TInterface), key, (_, _) => template.Create().Get<TType>());
+        _contracts.Add(typeof(TInterface));
         return this;
     }
 
     public ObjectTemplate Add<TInterface, TType>() where TType : class, TInterface where TInterface : class
     {
         _serviceCollection.AddKeyedTransient<TInterface, TType>(this);
+        _contracts.Add(typeof(TInterface));
         return this;
     }
 
     public ObjectTemplate Add<TType>() where TType : class
     {
         _serviceCollection.AddKeyedTransient<TType>(this);
+        _contracts.Add(typeof(TType));
         return this;
     }
 
@@ -323,19 +363,21 @@ public class ObjectTemplate
 
 public class FromObjectSection
 {
+    private readonly HashSet<Type> _contracts;
     private readonly IServiceCollection _serviceCollection;
     private readonly ObjectDesc _objectDesc;
     private readonly Dictionary<ObjectDesc, Object> _objects;
     private ObjectTemplate _key;
 
-    public FromObjectSection(ObjectDesc objectDesc, Dictionary<ObjectDesc,Object> objects, IServiceCollection serviceCollection, ObjectTemplate key)
+    public FromObjectSection(ObjectDesc objectDesc, Dictionary<ObjectDesc, Object> objects, IServiceCollection serviceCollection, ObjectTemplate key, HashSet<Type> contracts)
     {
         _objectDesc = objectDesc;
         _objects = objects;
         _serviceCollection = serviceCollection;
         _key = key;
+        _contracts = contracts;
     }
-    
+
     public FromObjectSection AddFromObject<TType>() =>
         AddFromObject<TType, TType>(_key);
 
@@ -355,6 +397,7 @@ public class FromObjectSection
 
             throw new Exception();
         });
+        _contracts.Add(typeof(TInterface));
 
         return this;
     }
@@ -364,19 +407,21 @@ public class FromObjectSection
 
 public class FromObjectsSection
 {
+    private readonly HashSet<Type> _contracts;
     private readonly IServiceCollection _serviceCollection;
     private readonly ObjectDesc[] _objectDescs;
     private readonly Dictionary<ObjectDesc, Object> _objects;
     private ObjectTemplate _key;
 
-    public FromObjectsSection(ObjectDesc[] objectDescs, Dictionary<ObjectDesc,Object> objects, IServiceCollection serviceCollection, ObjectTemplate key)
+    public FromObjectsSection(ObjectDesc[] objectDescs, Dictionary<ObjectDesc, Object> objects, IServiceCollection serviceCollection, ObjectTemplate key, HashSet<Type> contracts)
     {
         _objectDescs = objectDescs;
         _objects = objects;
         _serviceCollection = serviceCollection;
         _key = key;
+        _contracts = contracts;
     }
-    
+
     public FromObjectsSection AddFromObjects<TType>() =>
         AddFromObjects<TType, TType>(_key);
 
@@ -405,6 +450,7 @@ public class FromObjectsSection
 
             throw new Exception();
         });
+        _contracts.Add(typeof(TInterface[]));
 
         return this;
     }
@@ -422,4 +468,47 @@ public class RelatedObjectStorage
     }
 
     public Object this[ObjectDesc desc] => _relatedObjects[desc];
+}
+
+public static class DefaultGenerators
+{
+    public static Type DefaultIdType = typeof(int);
+
+    public static IGenerator<IValue<TType>> GetExternalValueGenerator<TType>()
+    {
+        return GetExternalValueGenerator<TType>(typeof(TType), DefaultIdType);
+    }
+
+    public static IGenerator<object> GetExternalValueGenerator(Type targetType)
+    {
+        return GetExternalValueGenerator<object>(targetType, DefaultIdType);
+    }
+
+    public static IGenerator<IValue<TType>> GetExternalValueGenerator<TType>(Type targetType, Type idType)
+    {
+        var mapObj = Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(idType, targetType));
+        var memoryObj =
+            Activator.CreateInstance(typeof(IO.Repositories.MemoryRepository<,>).MakeGenericType(idType, targetType), mapObj);
+        var idGeneratorObj = Activator.CreateInstance(typeof(Id.IncrementalGenerator<>).MakeGenericType(idType));
+        var generatorObj =
+            Activator.CreateInstance(typeof(Values.ExternalValueGenerator<,>).MakeGenericType(idType, targetType),
+                idGeneratorObj, memoryObj);
+        var generator = (IGenerator<IValue<TType>>)generatorObj!;
+        return generator;
+    }
+}
+
+public class InjectAttribute : Attribute
+{
+}
+
+[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
+public class IdAttribute : Attribute
+{
+    public int Id;
+
+    public IdAttribute(int id)
+    {
+        Id = id;
+    }
 }
