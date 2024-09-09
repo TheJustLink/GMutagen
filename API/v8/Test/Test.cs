@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
+using System.Security.Cryptography;
 
 using GMutagen.v8.Id;
 using GMutagen.v8.IO;
@@ -170,6 +172,22 @@ public interface IObjectFactory
 {
     IObject Create(Dictionary<Type, object> contracts);
 }
+public class DefaultObjectFactory<TId> : IObjectFactory
+{
+    private readonly IGenerator<TId> _idGenerator;
+
+    public DefaultObjectFactory(IGenerator<TId> idGenerator)
+    {
+        _idGenerator = idGenerator;
+    }
+
+    public IObject Create(Dictionary<Type, object> contracts)
+    {
+        var id = _idGenerator.Generate();
+        return new Object<TId>(id, contracts);
+    }
+}
+
 public interface IContractResolver
 {
     object Resolve(ContractDescriptor contract);
@@ -182,6 +200,65 @@ public class ObjectTemplateConfiguration : IContractResolver
     {
         var provider = _serviceCollection.BuildServiceProvider();
         return provider.GetService(contract.ImplementationType);
+
+        // _buildServices.AddTransient<TContract>(provider =>
+        // {
+        //     var type = typeof(TImplementation);
+        //     var valueType = typeof(IValue<>);
+        //
+        //     foreach (var constructor in type.GetConstructors())
+        //     {
+        //         if (constructor.GetCustomAttribute<InjectAttribute>() is null)
+        //             continue;
+        //
+        //         var parameters = constructor.GetParameters();
+        //         var resultParameters = new object[parameters.Length];
+        //
+        //         for (var i = 0; i < parameters.Length; i++)
+        //         {
+        //             var parameter = parameters[i];
+        //
+        //             if (parameter.ParameterType != valueType)
+        //             {
+        //                 resultParameters[i] = provider.GetRequiredService(parameter.ParameterType);
+        //             }
+        //             else
+        //             {
+        //                 var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
+        //                 var storage = locationKey is not null
+        //                 ? provider.GetRequiredKeyedService<IStorage<TId>>(locationKey)
+        //                     : provider.GetRequiredService<IStorage<TId>>();
+        //
+        //                 var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
+        //                 var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TId), genericValueType);
+        //
+        //                 Activator.CreateInstance(externalValueType, );
+        //             }
+        //         }
+        //
+        //         foreach (var parameter in constructor.GetParameters())
+        //         {
+        //
+        //         }
+        //         foreach (var constructorAttribute in constructor.GetCustomAttributes(true))
+        //         {
+        //             if (constructorAttribute is not InjectAttribute)
+        //                 continue;
+        //
+        //             var parameters = constructor.GetParameters();
+        //             var resultParameters = new object[parameters.Length];
+        //             for (int i = 0; i < parameters.Length; i++)
+        //                 resultParameters[i] = provider.GetRequiredService(parameters[i].ParameterType);
+        //
+        //             constructor.Invoke(instance, parameters);
+        //             return instance!;
+        //         }
+        //     }
+        //
+        //     throw new Exception("Constructor with InjectAttribute was not found");
+        // });
+
+        //Ne amozh silno sinok
     }
 }
 
@@ -199,17 +276,17 @@ public class ObjectTemplate
 public class Object<TId> : IObject
 {
     private readonly TId _id;
-    private readonly ObjectTemplate _template;
+    private readonly Dictionary<Type, object> _contracts;
 
-    public Object(TId id, ObjectTemplate template)
+    public Object(TId id, Dictionary<Type, object> contracts)
     {
         _id = id;
-        _template = template;
+        _contracts = contracts;
     }
 
     public TContract Get<TContract>() where TContract : class
     {
-        return _template.Contracts.;
+        return (TContract)_contracts[typeof(TContract)];
     }
 }
 public interface IObject
