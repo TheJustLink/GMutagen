@@ -1,10 +1,8 @@
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
-using System.Reflection.Metadata;
 
 using GMutagen.v8.Id;
 using GMutagen.v8.IO;
@@ -18,45 +16,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace GMutagen.v8.Test;
 
-class StorageSegment<TId>
-{
-    private readonly IStorage<TId> _storage;
-    private readonly TId _id;
-
-    public StorageSegment(IStorage<TId> storage, TId id)
-    {
-        _storage = storage;
-        _id = id;
-    }
-
-    public TValue Read<TValue>() => _storage.Read<TValue>(_id);
-    public void Write<TValue>(TValue value) => _storage.Write(_id, value);
-}
-
-class BucketStorage
-{
-    private readonly Dictionary<Type, List<object>> _bucketLists = new();
-
-    public void Add<TId, TValue>(IReadWrite<TId, TValue> bucket)
-    {
-        if (_bucketLists.TryGetValue(typeof(TValue), out var buckets))
-            buckets.Add(bucket);
-
-        buckets = new List<object>();
-        buckets.Add(bucket);
-
-        _bucketLists.Add(typeof(TValue), buckets);
-    }
-    public IEnumerable<IReadWrite<TId, TValue>> GetBuckets<TId, TValue>()
-    {
-        return _bucketLists[typeof(TValue)].OfType<IReadWrite<TId, TValue>>();
-    }
-}
-class ValueStorage<TId, TValue> : MemoryRepository<TId, IValue<TValue>>
-{
-
-}
-class Storage<TId> : IStorage<TId>
+public class Storage<TId> : IStorage<TId>
 {
     private readonly IBucketFactory<TId> _bucketFactory;
 
@@ -81,42 +41,23 @@ class Storage<TId> : IStorage<TId>
         return newBucket;
     }
 }
-interface IStorage<in TId> : IReadWrite<TId>
+public interface IStorage<in TId> : IReadWrite<TId>
 {
     IReadWrite<TId, TValue> GetBucket<TValue>();
 }
-interface IBucketFactory<in TId>
+public interface IBucketFactory<in TId>
 {
     IReadWrite<TId, T> Create<T>();
 }
-class BucketFactoryWithReplication<TId> : IBucketFactory<TId>
-{
-    private readonly IBucketFactory<TId> _sourceFactory;
-    private readonly BucketStorage _bucketStorage;
-
-    public BucketFactoryWithReplication(IBucketFactory<TId> sourceFactory, BucketStorage bucketStorage)
-    {
-        _sourceFactory = sourceFactory;
-        _bucketStorage = bucketStorage;
-    }
-    public IReadWrite<TId, T> Create<T>()
-    {
-        var bucket = _sourceFactory.Create<T>();
-        
-        _bucketStorage.Add(bucket);
-
-        return bucket;
-    }
-}
-class MemoryBucketFactory<TId> : IBucketFactory<TId>
+public class MemoryBucketFactory<TId> : IBucketFactory<TId>
 {
     public IReadWrite<TId, T> Create<T>() => new MemoryRepository<TId, T>();
 }
-class ValueLocationAttribute : Attribute { }
-class InMemoryAttribute : ValueLocationAttribute { }
-class InFileAttribute : ValueLocationAttribute { }
+public class ValueLocationAttribute : Attribute { }
+public class InMemoryAttribute : ValueLocationAttribute { }
+public class InFileAttribute : ValueLocationAttribute { }
 
-static class ServiceCollectionExtensions
+public static class ServiceCollectionExtensions
 {
     public static void AddDefaultMemoryStorage(this IServiceCollection services)
     {
@@ -142,147 +83,120 @@ static class ServiceCollectionExtensions
     }
 }
 
-// var a1 = new A(new FromDB());
-// var a2 = new A(new FromMemory());
-// var someTemplate = new ObjectTemplate();
-//
-// IMemoryValue<T> : IValue<T>
-// ExternalValue<T> : IValue<T>
-// FromMemory<T> : IValue<T>
-// {
-//      private T _value;
-// }
-
-//public class A
-//{
-//     private IValue<int> _b;
-//
-//     [Inject]
-//     public class A([InDb]IValue<int> c, [InDb]IValue<int> b)
-//     {
-//          _b = b;
-//          _c = c;
-//     }
-//      
-//}
-//
-// someTemplate.AddTransient(typeof(IValue<int>), new CombineKey(new Id(0)), (provider, key) =>
-// {
-//      return provider.Get();
-// })
-// container.AddStorage(impl, typeof(InDB));
-
-class ObjectTemplateBuilder<TId>
+public class ContractDescriptor
 {
-    private readonly ServiceCollection _buildServices = new();
-    private readonly Dictionary<Type, object?> _contracts = new();
+    public readonly Type Type;
+    public readonly Type? ImplementationType;
+    public readonly object? Implementation;
 
-    public ObjectTemplateBuilder()
+    public ContractDescriptor(Type type, Type? implementationType = null, object? implementation = null)
     {
+        Type = type;
+        ImplementationType = implementationType;
+        Implementation = implementation;
     }
 
-    public ObjectTemplateBuilder(ServiceCollection buildServices)
+    public override int GetHashCode() => Type.GetHashCode();
+
+    public static ContractDescriptor Create<TContract>() => new(typeof(TContract));
+    public static ContractDescriptor Create<TContract, TImplementation>() => new(typeof(TContract), typeof(TImplementation));
+    public static ContractDescriptor Create<TContract>(object implementation) => new(typeof(TContract), implementation.GetType(), implementation);
+}
+public class ObjectTemplateBuilder
+{
+    private readonly HashSet<ContractDescriptor> _contracts = new();
+
+    public void Add<TContract, TImplementation>() where TContract : class
     {
-        _buildServices.Add(buildServices);
+        _contracts.Add(ContractDescriptor.Create<TContract, TImplementation>());
+    }
+    public void Add<TContract>() where TContract : class
+    {
+        _contracts.Add(ContractDescriptor.Create<TContract>()); 
+    }
+    public void Add<TContract>(TContract implementation) where TContract : class
+    {
+        _contracts.Add(ContractDescriptor.Create<TContract>(implementation));
+    }
+
+    public ObjectTemplate Build() => new(_contracts);
+}
+public class ObjectBuilder
+{
+    private readonly IContractResolver _contractResolver;
+    private readonly IObjectFactory _objectFactory;
+    private readonly Dictionary<Type, ContractDescriptor> _contracts = new();
+
+    public ObjectBuilder(IContractResolver contractResolver, IObjectFactory objectFactory)
+    {
+        _contractResolver = contractResolver;
+        _objectFactory = objectFactory;
+    }
+
+    public void Add(ObjectTemplate template)
+    {
+        foreach (var contract in template.Contracts)
+            _contracts.Add(contract.Type, contract);
     }
 
     public void Set<TContract, TImplementation>() where TContract : class
     {
-        _buildServices.AddTransient<TContract>(provider =>
-        {
-            var type = typeof(TImplementation);
-            var valueType = typeof(IValue<>);
-
-            foreach (var constructor in type.GetConstructors())
-            {
-                if (constructor.GetCustomAttribute<InjectAttribute>() is null)
-                    continue;
-
-                var parameters = constructor.GetParameters();
-                var resultParameters = new object[parameters.Length];
-
-                for (var i = 0; i < parameters.Length; i++)
-                {
-                    var parameter = parameters[i];
-
-                    if (parameter.ParameterType != valueType)
-                    {
-                        resultParameters[i] = provider.GetRequiredService(parameter.ParameterType);
-                    }
-                    else
-                    {
-                        var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
-                        var storage = locationKey is not null
-                            ? provider.GetRequiredKeyedService<IStorage<TId>>(locationKey)
-                            : provider.GetRequiredService<IStorage<TId>>();
-
-                        var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
-                        var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TId), genericValueType);
-
-                        Activator.CreateInstance(externalValueType, );
-                    }
-                }
-
-                foreach (var parameter in constructor.GetParameters())
-                {
-                    
-                }
-                foreach (var constructorAttribute in constructor.GetCustomAttributes(true))
-                {
-                    if (constructorAttribute is not InjectAttribute)
-                        continue;
-
-                    var parameters = constructor.GetParameters();
-                    var resultParameters = new object[parameters.Length];
-                    for (int i = 0; i < parameters.Length; i++)
-                        resultParameters[i] = provider.GetRequiredService(parameters[i].ParameterType);
-
-                    constructor.Invoke(instance, parameters);
-                    return instance!;
-                }
-            }
-
-            throw new Exception("Constructor with InjectAttribute was not found");
-        });
-
-        _contracts.Add(typeof(TContract), null);
+        Set(ContractDescriptor.Create<TContract, TImplementation>());
     }
     public void Set<TContract>(TContract implementation) where TContract : class
     {
-        _buildServices.AddSingleton<TContract>(implementation);
-        _contracts.Add(typeof(TContract), implementation);
+        Set(ContractDescriptor.Create<TContract>(implementation));
     }
 
-    public ObjectTemplate Build()
+    public IObject Build()
     {
-        var buildServices = _buildServices.BuildServiceProvider();
+        var implementations = new Dictionary<Type, object>(_contracts.Count);
 
-        foreach (var contract in _contracts)
-        {
-            if (contract.Value is not null) continue;
+        foreach (var contract in _contracts.Values)
+            implementations[contract.Type] = _contractResolver.Resolve(contract);
 
-            var implementation = buildServices.GetRequiredService(contract.Key);
-            _contracts[contract.Key] = implementation;
-        }
+        return _objectFactory.Create(implementations);
+    }
 
-        return new ObjectTemplate(_contracts!);
+    private void Set(ContractDescriptor contract)
+    {
+        if (_contracts.ContainsKey(contract.Type) is false)
+            throw new ArgumentOutOfRangeException(nameof(contract.Type));
+
+        _contracts[contract.Type] = contract;
     }
 }
-class ObjectTemplate
+public interface IObjectFactory
 {
-    private readonly Dictionary<Type, object> _contracts;
+    IObject Create(Dictionary<Type, object> contracts);
+}
+public interface IContractResolver
+{
+    object Resolve(ContractDescriptor contract);
+}
+public class ObjectTemplateConfiguration : IContractResolver
+{
+    private readonly ServiceCollection _serviceCollection;
 
-    public ObjectTemplate(Dictionary<Type, object> contracts)
+    public object Resolve(ContractDescriptor contract)
+    {
+        var provider = _serviceCollection.BuildServiceProvider();
+        return provider.GetService(contract.ImplementationType);
+    }
+}
+
+public class ObjectTemplate
+{
+    private readonly HashSet<ContractDescriptor> _contracts;
+
+    public ObjectTemplate(HashSet<ContractDescriptor> contracts)
     {
         _contracts = contracts;
     }
 
-    public TContract GetContract<TContract>() where TContract : class
-    {
-        return (TContract)_contracts[typeof(TContract)];
-    }
+    public IEnumerable<ContractDescriptor> Contracts => _contracts;
 }
-class Object<TId> : IObject
+public class Object<TId> : IObject
 {
     private readonly TId _id;
     private readonly ObjectTemplate _template;
@@ -295,15 +209,27 @@ class Object<TId> : IObject
 
     public TContract Get<TContract>() where TContract : class
     {
-        return _template.GetContract<TContract>();
+        return _template.Contracts.;
     }
 }
-interface IObject
+public interface IObject
 {
     TContract Get<TContract>() where TContract : class;
 }
+public interface ITestContract { }
+public class TestContract
+{
+    private readonly IValue<int> _value1;
+    private readonly IValue<int> _value2;
+    public TestContract(IValue<int> value1, [InFile]IValue<int> value2)
+    {
+        _value1 = value1;
+        _value2 = value2;
+    }
+}
 
-class Test
+
+public class Test
 {
     public static void Main()
     {
@@ -321,6 +247,10 @@ class Test
         var externalValue = new ExternalValue<int, float>(0, floatBucket);
 
         externalValue.Value = 10;
+
+        var snakeTemplateBuilder = new ObjectTemplateBuilder();
+        snakeTemplateBuilder.Add<ITestContract, TestContract>();
+        snakeTemplateBuilder.Add<ITestContract>();
 
 
         Game(new GuidGenerator());
@@ -395,10 +325,10 @@ class Test
     }
 }
 
-internal class DefaultMoga : IAmoga
+public class DefaultMoga : IAmoga
 {
 }
 
-internal interface IAmoga
+public interface IAmoga
 {
 }
