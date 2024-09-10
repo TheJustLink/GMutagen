@@ -5,14 +5,12 @@ using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Security.Cryptography;
-
 using GMutagen.v8.Id;
 using GMutagen.v8.IO;
 using GMutagen.v8.IO.Repositories;
 using GMutagen.v8.Objects;
 using GMutagen.v8.Objects.Template;
 using GMutagen.v8.Values;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -43,21 +41,33 @@ public class Storage<TId> : IStorage<TId>
         return newBucket;
     }
 }
+
 public interface IStorage<in TId> : IReadWrite<TId>
 {
     IReadWrite<TId, TValue> GetBucket<TValue>();
 }
+
 public interface IBucketFactory<in TId>
 {
     IReadWrite<TId, T> Create<T>();
 }
+
 public class MemoryBucketFactory<TId> : IBucketFactory<TId>
 {
     public IReadWrite<TId, T> Create<T>() => new MemoryRepository<TId, T>();
 }
-public class ValueLocationAttribute : Attribute { }
-public class InMemoryAttribute : ValueLocationAttribute { }
-public class InFileAttribute : ValueLocationAttribute { }
+
+public class ValueLocationAttribute : Attribute
+{
+}
+
+public class InMemoryAttribute : ValueLocationAttribute
+{
+}
+
+public class InFileAttribute : ValueLocationAttribute
+{
+}
 
 public static class ServiceCollectionExtensions
 {
@@ -68,7 +78,8 @@ public static class ServiceCollectionExtensions
         services.AddDefaultStorage<int, InMemoryAttribute>(bucketFactory);
     }
 
-    public static IServiceCollection AddDefaultStorage<TId, TKey>(this IServiceCollection services, IBucketFactory<TId> bucketFactory)
+    public static IServiceCollection AddDefaultStorage<TId, TKey>(this IServiceCollection services,
+        IBucketFactory<TId> bucketFactory)
     {
         var storage = new Storage<TId>(bucketFactory);
         services.AddKeyedSingleton<IStorage<TId>>(typeof(TKey), storage);
@@ -76,7 +87,9 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
-    public static IServiceCollection AddStorage<TId, TKey>(this IServiceCollection services, IBucketFactory<TId> bucketFactory)
+
+    public static IServiceCollection AddStorage<TId, TKey>(this IServiceCollection services,
+        IBucketFactory<TId> bucketFactory)
     {
         var storage = new Storage<TId>(bucketFactory);
         services.AddKeyedSingleton<IStorage<TId>>(typeof(TKey), storage);
@@ -101,53 +114,74 @@ public class ContractDescriptor
     public override int GetHashCode() => Type.GetHashCode();
 
     public static ContractDescriptor Create<TContract>() => new(typeof(TContract));
-    public static ContractDescriptor Create<TContract, TImplementation>() => new(typeof(TContract), typeof(TImplementation));
-    public static ContractDescriptor Create<TContract>(object implementation) => new(typeof(TContract), implementation.GetType(), implementation);
+
+    public static ContractDescriptor Create<TContract, TImplementation>() =>
+        new(typeof(TContract), typeof(TImplementation));
+
+    public static ContractDescriptor Create<TContract>(object implementation) =>
+        new(typeof(TContract), implementation.GetType(), implementation);
 }
+
 public class ObjectTemplateBuilder
 {
     private readonly HashSet<ContractDescriptor> _contracts = new();
 
-    public void Add<TContract, TImplementation>() where TContract : class
+    public ObjectTemplateBuilder Add<TContract, TImplementation>()
+        where TContract : class where TImplementation : TContract
     {
         _contracts.Add(ContractDescriptor.Create<TContract, TImplementation>());
+        return this;
     }
-    public void Add<TContract>() where TContract : class
+
+    public ObjectTemplateBuilder Add<TContract>() where TContract : class
     {
-        _contracts.Add(ContractDescriptor.Create<TContract>()); 
+        _contracts.Add(ContractDescriptor.Create<TContract>());
+        return this;
     }
-    public void Add<TContract>(TContract implementation) where TContract : class
+
+    public ObjectTemplateBuilder Add<TContract>(TContract implementation) where TContract : class
     {
         _contracts.Add(ContractDescriptor.Create<TContract>(implementation));
+        return this;
     }
 
     public ObjectTemplate Build() => new(_contracts);
 }
+
 public class ObjectBuilder
 {
-    private readonly IContractResolver _contractResolver;
-    private readonly IObjectFactory _objectFactory;
+    private IContractResolver _contractResolver;
+    private IObjectFactory _objectFactory;
     private readonly Dictionary<Type, ContractDescriptor> _contracts = new();
 
-    public ObjectBuilder(IContractResolver contractResolver, IObjectFactory objectFactory)
-    {
-        _contractResolver = contractResolver;
-        _objectFactory = objectFactory;
-    }
-
-    public void Add(ObjectTemplate template)
+    public ObjectBuilder(ObjectTemplate template)
     {
         foreach (var contract in template.Contracts)
             _contracts.Add(contract.Type, contract);
     }
 
-    public void Set<TContract, TImplementation>() where TContract : class
+    public ObjectBuilder SetResolver(IContractResolver contractResolver)
+    {
+        _contractResolver = contractResolver;
+        return this;
+    }
+
+    public ObjectBuilder SetObjectFactory(IObjectFactory objectFactory)
+    {
+        _objectFactory = objectFactory;
+        return this;
+    }
+
+    public ObjectBuilder Set<TContract, TImplementation>() where TContract : class
     {
         Set(ContractDescriptor.Create<TContract, TImplementation>());
+        return this;
     }
-    public void Set<TContract>(TContract implementation) where TContract : class
+
+    public ObjectBuilder Set<TContract>(TContract implementation) where TContract : class
     {
         Set(ContractDescriptor.Create<TContract>(implementation));
+        return this;
     }
 
     public IObject Build()
@@ -160,18 +194,21 @@ public class ObjectBuilder
         return _objectFactory.Create(implementations);
     }
 
-    private void Set(ContractDescriptor contract)
+    private ObjectBuilder Set(ContractDescriptor contract)
     {
         if (_contracts.ContainsKey(contract.Type) is false)
             throw new ArgumentOutOfRangeException(nameof(contract.Type));
 
         _contracts[contract.Type] = contract;
+        return this;
     }
 }
+
 public interface IObjectFactory
 {
     IObject Create(Dictionary<Type, object> contracts);
 }
+
 public class DefaultObjectFactory<TId> : IObjectFactory
 {
     private readonly IGenerator<TId> _idGenerator;
@@ -192,14 +229,23 @@ public interface IContractResolver
 {
     object Resolve(ContractDescriptor contract);
 }
+
 public class ObjectTemplateConfiguration : IContractResolver
 {
-    private readonly ServiceCollection _serviceCollection;
-
+    private readonly ServiceCollection _serviceCollection = new();
+    
+    private object? _resolveKey = null;
+    private ServiceProvider _serviceProvider = null!;
+    
     public object Resolve(ContractDescriptor contract)
     {
-        var provider = _serviceCollection.BuildServiceProvider();
-        return provider.GetService(contract.ImplementationType);
+        if (_serviceProvider == null!)
+            _serviceProvider = _serviceCollection.BuildServiceProvider();
+        
+        if(_resolveKey != null)
+            return _serviceProvider.GetRequiredKeyedService(contract.ImplementationType!, _resolveKey);
+        
+        return _serviceProvider.GetRequiredService(contract.ImplementationType!);
 
         // _buildServices.AddTransient<TContract>(provider =>
         // {
@@ -260,6 +306,132 @@ public class ObjectTemplateConfiguration : IContractResolver
 
         //Ne amozh silno sinok
     }
+
+    public ObjectTemplateConfiguration SetResolveKey(object? resolveKey)
+    {
+        _resolveKey = resolveKey;
+        return this;
+    }
+
+    public ObjectTemplateConfiguration Add<TInterface, TImplementation>(object? key = null)
+    {
+        if (key == null)
+            _serviceCollection.AddTransient(typeof(TInterface), ResolveFromProvider<TImplementation>);
+        else
+            _serviceCollection.AddKeyedTransient(typeof(TInterface), key, ResolveFromProvider<TImplementation>);
+        
+        return this;
+    }
+
+    public ObjectTemplateConfiguration AddResolution<TInterface, TImplementation>(object? key = null)
+    {
+        if (key == null)
+            _serviceCollection.AddTransient(typeof(TInterface), typeof(TImplementation));
+        else
+            _serviceCollection.AddKeyedTransient(typeof(TInterface), key, typeof(TImplementation));
+
+        return this;
+    }
+
+    public ObjectTemplateConfiguration ResolveFromAnotherKey<TType>(object? key, object? targetKey)
+    {
+        _serviceCollection.AddKeyedTransient(typeof(TType), key, ResolveFromAnotherKey<TType>(targetKey));
+        return this;
+    }
+
+    private object ResolveFromProvider<TImplementation>(IServiceProvider serviceProvider)
+    {
+        var type = typeof(TImplementation);
+        var valueType = typeof(IValue<>);
+        var constructors = type.GetConstructors();
+        
+        foreach (var constructor in constructors)
+        {
+            if (constructor.GetCustomAttribute<InjectAttribute>() is null || constructors.Length != 1)
+                continue;
+        
+            var parameters = constructor.GetParameters();
+            var resultParameters = new object[parameters.Length];
+        
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                var parameter = parameters[i];
+        
+                if (parameter.ParameterType != valueType)
+                {
+                    resultParameters[i] = serviceProvider.GetRequiredService(parameter.ParameterType);
+                }
+                else
+                {
+                    var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
+                    var storage = locationKey is not null
+                        ? serviceProvider.GetRequiredKeyedService<IStorage<TImplementation>>(locationKey)
+                        : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
+        
+                    var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
+                    var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
+        
+                    var instance = Activator.CreateInstance(externalValueType,);
+                    constructor.Invoke(instance, resultParameters);
+                    return instance!;
+                }
+            }
+        }
+        
+        throw new Exception("Constructor with InjectAttribute was not found");
+    }
+    
+    private object ResolveFromProvider<TImplementation>(IServiceProvider serviceProvider, object? key)
+    {
+        var type = typeof(TImplementation);
+        var valueType = typeof(IValue<>);
+        var constructors = type.GetConstructors();
+        
+        foreach (var constructor in constructors)
+        {
+            if (constructor.GetCustomAttribute<InjectAttribute>() is null || constructors.Length != 1)
+                continue;
+        
+            var parameters = constructor.GetParameters();
+            var resultParameters = new object[parameters.Length];
+        
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                var parameter = parameters[i];
+        
+                if (parameter.ParameterType != valueType)
+                {
+                    resultParameters[i] = serviceProvider.GetRequiredKeyedService(parameter.ParameterType, key);
+                }
+                else
+                {
+                    var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
+                    var storage = locationKey is not null
+                    ? serviceProvider.GetRequiredKeyedService<IStorage<TImplementation>>(locationKey)
+                        : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
+        
+                    var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
+                    var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
+        
+                    var instance = Activator.CreateInstance(externalValueType,);
+                    constructor.Invoke(instance, resultParameters);
+                    return instance!;
+                }
+            }
+        }
+        
+        throw new Exception("Constructor with InjectAttribute was not found");
+    }
+    
+    private Func<IServiceProvider, object?, object?> ResolveFromAnotherKey<TType>(object? targetKey)
+    {
+        return ResolveFromProviderFromAnotherKey<TType>;
+        
+        object ResolveFromProviderFromAnotherKey<TImplementation>(IServiceProvider serviceProvider, object? key)
+        {
+            return serviceProvider.GetRequiredKeyedService(typeof(TImplementation), targetKey);
+        }
+    }
 }
 
 public class ObjectTemplate
@@ -273,6 +445,7 @@ public class ObjectTemplate
 
     public IEnumerable<ContractDescriptor> Contracts => _contracts;
 }
+
 public class Object<TId> : IObject
 {
     private readonly TId _id;
@@ -289,22 +462,27 @@ public class Object<TId> : IObject
         return (TContract)_contracts[typeof(TContract)];
     }
 }
+
 public interface IObject
 {
     TContract Get<TContract>() where TContract : class;
 }
-public interface ITestContract { }
-public class TestContract
+
+public interface ITestContract
+{
+}
+
+public class TestContract : ITestContract
 {
     private readonly IValue<int> _value1;
     private readonly IValue<int> _value2;
-    public TestContract(IValue<int> value1, [InFile]IValue<int> value2)
+
+    public TestContract(IValue<int> value1, [InFile] IValue<int> value2)
     {
         _value1 = value1;
         _value2 = value2;
     }
 }
-
 
 public class Test
 {
@@ -336,19 +514,20 @@ public class Test
 
     private static void Game<TId>(IGenerator<TId> idGenerator)
     {
-        var abobaTemplate = new ObjectTemplate();
-        var amogaTemplate = new ObjectTemplate()
-            .AddObject(abobaTemplate, out var desc1)
-            
-            .AddFromObjectSection(desc1)
-            .AddFromObject<IAmoga>()
-            .AddFromObject<IAmoga>()
-            .AddFromObject<IAmoga>()
-            .End()
-            
-            .AddObject(abobaTemplate, out var desc2)
-            .AddFromObject<IAmoga>(desc2);
-        
+        var templateBuilder = new ObjectTemplateBuilder()
+            .Add<IPosition, DefaultPosition>();
+
+        var template = templateBuilder.Build();
+
+        var objectBuilder = new ObjectBuilder(template)
+            .SetResolver(new ObjectTemplateConfiguration())
+            .SetObjectFactory(new DefaultObjectFactory<int>(new IncrementalGenerator<int>()));
+
+
+        var obj1 = objectBuilder.Build();
+        var obj2 = objectBuilder.Build();
+        var obj3 = objectBuilder.Build();
+
         var positionGenerator = GetDefaultPositionGenerator(idGenerator);
 
         var serviceCollection = new ServiceCollection()
