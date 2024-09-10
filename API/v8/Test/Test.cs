@@ -1,20 +1,65 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
-using System.Linq;
 using System.Numerics;
 using System.Reflection;
-using System.Security.Cryptography;
+using Microsoft.Extensions.DependencyInjection;
+
 using GMutagen.v8.Id;
 using GMutagen.v8.IO;
 using GMutagen.v8.IO.Repositories;
 using GMutagen.v8.Objects;
 using GMutagen.v8.Objects.Template;
 using GMutagen.v8.Values;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Diagnostics.Contracts;
+using System.Linq;
+using System.Reflection.Metadata;
+using System.Data.Common;
 
 namespace GMutagen.v8.Test;
+
+/// <summary>
+/// Extension methods for getting services from an <see cref="T:System.IServiceProvider" />.
+/// </summary>
+public static class ServiceProviderKeyedServiceExtensions
+{
+    /// <summary>
+    /// Get service of type <typeparamref name="T" /> from the <see cref="T:System.IServiceProvider" />.
+    /// </summary>
+    /// <typeparam name="T">The type of service object to get.</typeparam>
+    /// <param name="provider">The <see cref="T:System.IServiceProvider" /> to retrieve the service object from.</param>
+    /// <param name="serviceKey">An object that specifies the key of service object to get.</param>
+    /// <returns>A service object of type <typeparamref name="T" /> or null if there is no such service.</returns>
+    public static object? GetKeyedService(this IServiceProvider provider, Type serviceType, object? serviceKey)
+    {
+        return provider is IKeyedServiceProvider keyedServiceProvider
+            ? keyedServiceProvider.GetKeyedService(serviceType, serviceKey)
+            : throw new InvalidOperationException("Doesn't support keyed service provider");
+    }
+}
+public static class CustomAttributeDataExtensions
+{
+    public static bool Contains<T>(this IEnumerable<CustomAttributeData> attributes)
+    {
+        foreach (var attribute in attributes) 
+        {
+            if(attribute.AttributeType.IsAssignableTo(typeof(T)))
+                return true;
+        }
+
+        return false;
+    }
+
+    public static CustomAttributeData? Get<T>(this IEnumerable<CustomAttributeData> attributes)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attribute.AttributeType.IsAssignableTo(typeof(T)))
+                return attribute;
+        }
+
+        return null;
+    }
+}
 
 public class Storage<TId> : IStorage<TId>
 {
@@ -40,44 +85,50 @@ public class Storage<TId> : IStorage<TId>
 
         return newBucket;
     }
+    public object GetBucket(Type valueType)
+    {
+        if (_buckets.TryGetValue(valueType, out var cachedBucket))
+            return cachedBucket;
+
+        var newBucket = _bucketFactory.Create(valueType);
+        _buckets[valueType] = newBucket;
+
+        return newBucket;
+    }
 }
 
 public interface IStorage<in TId> : IReadWrite<TId>
 {
     IReadWrite<TId, TValue> GetBucket<TValue>();
+    object GetBucket(Type valueType);
 }
 
 public interface IBucketFactory<in TId>
 {
     IReadWrite<TId, T> Create<T>();
+    object Create(Type valueType);
 }
-
-public class MemoryBucketFactory<TId> : IBucketFactory<TId>
+public class MemoryBucketFactory<TId> : IBucketFactory<TId> where TId : notnull
 {
     public IReadWrite<TId, T> Create<T>() => new MemoryRepository<TId, T>();
+    public object Create(Type valueType)
+    {
+        var memoryOpenType = typeof(MemoryRepository<,>);
+        var memoryClosedType = memoryOpenType.MakeGenericType(typeof(TId), valueType);
+        
+        return Activator.CreateInstance(memoryClosedType)!;
+    }
 }
-
-public class ValueLocationAttribute : Attribute
-{
-}
-
-public class InMemoryAttribute : ValueLocationAttribute
-{
-}
-
-public class InFileAttribute : ValueLocationAttribute
-{
-}
+public class InMemoryAttribute : ValueLocationAttribute { }
 
 public static class ServiceCollectionExtensions
 {
-    public static void AddDefaultMemoryStorage(this IServiceCollection services)
+    public static IServiceCollection AddDefaultMemoryStorage<TId>(this IServiceCollection services)
     {
-        var bucketFactory = new MemoryBucketFactory<int>();
+        var bucketFactory = new MemoryBucketFactory<TId>();
 
-        services.AddDefaultStorage<int, InMemoryAttribute>(bucketFactory);
+        return services.AddDefaultStorage<TId, InMemoryAttribute>(bucketFactory);
     }
-
     public static IServiceCollection AddDefaultStorage<TId, TKey>(this IServiceCollection services,
         IBucketFactory<TId> bucketFactory)
     {
@@ -114,10 +165,8 @@ public class ContractDescriptor
     public override int GetHashCode() => Type.GetHashCode();
 
     public static ContractDescriptor Create<TContract>() => new(typeof(TContract));
-
     public static ContractDescriptor Create<TContract, TImplementation>() =>
         new(typeof(TContract), typeof(TImplementation));
-
     public static ContractDescriptor Create<TContract>(object implementation) =>
         new(typeof(TContract), implementation.GetType(), implementation);
 }
@@ -126,44 +175,44 @@ public class ObjectTemplateBuilder
 {
     private readonly HashSet<ContractDescriptor> _contracts = new();
 
+    public ObjectTemplate Build() => new(_contracts);
+
     public ObjectTemplateBuilder Add<TContract, TImplementation>()
         where TContract : class where TImplementation : TContract
     {
-        _contracts.Add(ContractDescriptor.Create<TContract, TImplementation>());
-        return this;
+        return Add(ContractDescriptor.Create<TContract, TImplementation>());
     }
-
     public ObjectTemplateBuilder Add<TContract>() where TContract : class
     {
-        _contracts.Add(ContractDescriptor.Create<TContract>());
-        return this;
+        return Add(ContractDescriptor.Create<TContract>());
     }
-
     public ObjectTemplateBuilder Add<TContract>(TContract implementation) where TContract : class
     {
-        _contracts.Add(ContractDescriptor.Create<TContract>(implementation));
+        return Add(ContractDescriptor.Create<TContract>(implementation));
+    }
+    public ObjectTemplateBuilder Add(ContractDescriptor contract)
+    {
+        _contracts.Add(contract);
+
         return this;
     }
-
-    public ObjectTemplate Build() => new(_contracts);
 }
 
 public class ObjectBuilder
 {
-    private IContractResolver _contractResolver;
     private IObjectFactory _objectFactory;
     private readonly Dictionary<Type, ContractDescriptor> _contracts = new();
 
-    public ObjectBuilder(ObjectTemplate template)
+    public ObjectBuilder(IObjectFactory objectFactory, ObjectTemplate template)
+        : this(objectFactory) => Add(template);
+    public ObjectBuilder(IObjectFactory objectFactory)
     {
-        foreach (var contract in template.Contracts)
-            _contracts.Add(contract.Type, contract);
+        _objectFactory = objectFactory;
     }
 
-    public ObjectBuilder SetResolver(IContractResolver contractResolver)
+    public IObject Build()
     {
-        _contractResolver = contractResolver;
-        return this;
+        return _objectFactory.Create(_contracts);
     }
 
     public ObjectBuilder SetObjectFactory(IObjectFactory objectFactory)
@@ -172,26 +221,28 @@ public class ObjectBuilder
         return this;
     }
 
+    public ObjectBuilder Add(ObjectTemplate template)
+    {
+        foreach (var contract in template.Contracts)
+            _contracts.Add(contract.Type, contract);
+
+        return this;
+    }
+    public ObjectBuilder OverrideWith(ObjectTemplate template)
+    {
+        foreach (var contract in template.Contracts)
+            _contracts[contract.Type] = contract;
+
+        return this;
+    }
+
     public ObjectBuilder Set<TContract, TImplementation>() where TContract : class
     {
-        Set(ContractDescriptor.Create<TContract, TImplementation>());
-        return this;
+        return Set(ContractDescriptor.Create<TContract, TImplementation>());
     }
-
     public ObjectBuilder Set<TContract>(TContract implementation) where TContract : class
     {
-        Set(ContractDescriptor.Create<TContract>(implementation));
-        return this;
-    }
-
-    public IObject Build()
-    {
-        var implementations = new Dictionary<Type, object>(_contracts.Count);
-
-        foreach (var contract in _contracts.Values)
-            implementations[contract.Type] = _contractResolver.Resolve(contract);
-
-        return _objectFactory.Create(implementations);
+        return Set(ContractDescriptor.Create<TContract>(implementation));
     }
 
     private ObjectBuilder Set(ContractDescriptor contract)
@@ -206,114 +257,320 @@ public class ObjectBuilder
 
 public interface IObjectFactory
 {
-    IObject Create(Dictionary<Type, object> contracts);
+    IObject Create(Dictionary<Type, ContractDescriptor> contracts);
 }
-
 public class DefaultObjectFactory<TId> : IObjectFactory
 {
     private readonly IGenerator<TId> _idGenerator;
+    private readonly IContractResolver _contractResolver;
 
-    public DefaultObjectFactory(IGenerator<TId> idGenerator)
+    public DefaultObjectFactory(IGenerator<TId> idGenerator, IContractResolver contractResolver)
     {
         _idGenerator = idGenerator;
+        _contractResolver = contractResolver;
     }
 
-    public IObject Create(Dictionary<Type, object> contracts)
+    public IObject Create(Dictionary<Type, ContractDescriptor> contracts)
     {
         var id = _idGenerator.Generate();
-        return new Object<TId>(id, contracts);
+        var implementations = new Dictionary<Type, object>(contracts.Count);
+
+        foreach (var contract in contracts.Values)
+            implementations[contract.Type] = _contractResolver.Resolve(contract, id);
+
+        return new Object<TId>(id, implementations);
     }
 }
 
+public class ObjectContractResolver : IContractResolver
+{
+    private readonly IContractResolverChain _resolverChain;
+
+    public ObjectContractResolver(IContractResolverChain resolverChain)
+    {
+        _resolverChain = resolverChain;
+    }
+
+    public object Resolve<TId>(ContractDescriptor contract, TId id)
+    {
+        var context = new ContractResolverContext(contract);
+        context.Id = id;
+        
+        if (_resolverChain.Resolve(context) && context.Result is not null)
+            return context.Result;
+
+        throw new InvalidOperationException($"Can't resolve {context.Contract.Type}");
+    }
+}
 public interface IContractResolver
 {
-    object Resolve(ContractDescriptor contract);
+    object Resolve<TId>(ContractDescriptor contract, TId id);
 }
 
-public class ObjectTemplateConfiguration : IContractResolver
+public class ContractResolverFromDescriptor : IContractResolverChain
+{
+    private readonly IContractResolverChain _implementationTypeResolver;
+    public ContractResolverFromDescriptor(IContractResolverChain implementationTypeResolver)
+    {
+        _implementationTypeResolver = implementationTypeResolver;
+    }
+
+    public bool Resolve(ContractResolverContext context)
+    {
+        context.Result = context.Contract.Implementation;
+        if (context.Result is not null)
+            return true;
+
+        if (context.Contract.ImplementationType is null)
+            return false;
+
+        var implementationContract = new ContractDescriptor(context.Contract.ImplementationType);
+        var implementationContext = new ContractResolverContext(implementationContract);
+        implementationContext.Id = context.Id;
+
+        if (_implementationTypeResolver.Resolve(implementationContext) is false || implementationContext.Result is null)
+            return false;
+
+        context.Result = implementationContext.Result;
+        return true;
+    }
+}
+public class ContractResolverFromConstructor : IContractResolverChain
+{
+    private readonly IContractResolverChain _parameterResolver;
+    public ContractResolverFromConstructor(IContractResolverChain parameterResolver)
+    {
+        _parameterResolver = parameterResolver;
+    }
+
+    public bool Resolve(ContractResolverContext context)
+    {
+        var constructors = context.Contract.Type.GetConstructors();
+
+        return constructors.Any(constructor => ResolveConstructor(context, constructor));
+    }
+
+    private bool ResolveConstructor(ContractResolverContext context, ConstructorInfo constructor)
+    {
+        var parameters = constructor.GetParameters();
+        var resultParameters = new object[parameters.Length];
+
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            var parameter = parameters[i];
+
+            var parameterContract = new ContractDescriptor(parameter.ParameterType);
+            var parameterContext = new ContractResolverContext(parameterContract);
+            parameterContext.Id = context.Id;
+            parameterContext.Attributes = parameter.CustomAttributes.ToArray();
+
+            if (_parameterResolver.Resolve(parameterContext) is false || parameterContext.Result is null)
+                return false;
+
+            resultParameters[i] = parameterContext.Result;
+        }
+
+        context.Result = constructor.Invoke(resultParameters);
+        return true;
+    }
+}
+public class ValueResolverFromStorage<TId> : IContractResolverChain
+{
+    private readonly IContractResolverChain _storageResolver;
+    public ValueResolverFromStorage(IContractResolverChain storageResolver)
+    {
+        _storageResolver = storageResolver;
+    }
+
+    public bool Resolve(ContractResolverContext context)
+    {
+        if (context.Contract.Type.IsAssignableTo(typeof(IValue)) is false || context.Id is not TId)
+            return false;
+
+        var genericValueType = context.Contract.Type.GenericTypeArguments[0];
+        var idType = typeof(TId);
+        var externalValueType = typeof(ExternalValue<,>).MakeGenericType(idType, genericValueType);
+        
+        var storageContract = new ContractDescriptor(typeof(IStorage<TId>));
+        var storageResolverContext = new ContractResolverContext(storageContract);
+        storageResolverContext.Id = context.Id;
+
+        if (context.Attributes is not null)
+        {
+            var locationKey = context.Attributes.Get<ValueLocationAttribute>();
+            if (locationKey is not null)
+                storageResolverContext.Key = locationKey.AttributeType;
+        }
+
+        if (_storageResolver.Resolve(storageResolverContext) is false || storageResolverContext.Result is null)
+            return false;
+
+        var storage = (storageResolverContext.Result as IStorage<TId>)!;
+        var bucket = storage.GetBucket(genericValueType);
+
+        context.Result = Activator.CreateInstance(externalValueType, context.Id, bucket);
+        return true;
+    }
+}
+public class ContractResolverFromContainer : IContractResolverChain
+{
+    private readonly IServiceProvider _services;
+    public ContractResolverFromContainer(IServiceProvider services)
+    {
+        _services = services;
+    }
+
+    public bool Resolve(ContractResolverContext context)
+    {
+        context.Result = context.Key is not null
+            ? _services.GetKeyedService(context.Contract.Type, context.Key)
+            : _services.GetService(context.Contract.Type);
+
+        return context.Result is not null;
+    }
+}
+public class CompositeContractResolverChain : IContractResolverChain
+{
+    private readonly List<IContractResolverChain> _resolvers;
+    public CompositeContractResolverChain(params IContractResolverChain[] resolvers)
+    {
+        _resolvers = new List<IContractResolverChain>(resolvers);
+    }
+
+    public CompositeContractResolverChain Add(IContractResolverChain resolver)
+    {
+        _resolvers.Add(resolver);
+        return this;
+    }
+
+    public bool Resolve(ContractResolverContext context)
+    {
+        return _resolvers.Any(resolver => resolver.Resolve(context));
+    }
+}
+public interface IContractResolverChain
+{
+    bool Resolve(ContractResolverContext context);
+}
+public class ContractResolverContext
+{
+    public ContractDescriptor Contract;
+    public object? Id;
+    public object? Key;
+    public CustomAttributeData[]? Attributes;
+    public object? Result;
+
+    public ContractResolverContext(ContractDescriptor contract)
+    {
+        Contract = contract;
+    }
+}
+
+public class ContractResolver : IContractResolverChain
+{
+    private ServiceProvider _serviceProvider;
+    private object? _resolveKey;
+
+    public ContractResolver(ServiceProvider serviceProvider) : this(serviceProvider, null)
+    {
+    }
+
+    public ContractResolver(ServiceProvider serviceProvider, object? resolveKey)
+    {
+        _serviceProvider = serviceProvider;
+        _resolveKey = resolveKey;
+    }
+
+    public bool Resolve(ContractResolverContext context)
+    {
+        object? result = null;
+        if (_resolveKey != null)
+            result = _serviceProvider.GetRequiredKeyedService(context.Contract.ImplementationType!, _resolveKey);
+
+        result = _serviceProvider.GetRequiredService(context.Contract.ImplementationType!);
+        return true;
+    }
+}
+
+public class ContractResolveBuilder
 {
     private readonly ServiceCollection _serviceCollection = new();
     
     private object? _resolveKey = null;
-    private ServiceProvider _serviceProvider = null!;
-    
-    public object Resolve(ContractDescriptor contract)
+
+
+    // _buildServices.AddTransient<TContract>(provider =>
+    // {
+    //     var type = typeof(TImplementation);
+    //     var valueType = typeof(IValue<>);
+    //
+    //     foreach (var constructor in type.GetConstructors())
+    //     {
+    //         if (constructor.GetCustomAttribute<InjectAttribute>() is null)
+    //             continue;
+    //
+    //         var parameters = constructor.GetParameters();
+    //         var resultParameters = new object[parameters.Length];
+    //
+    //         for (var i = 0; i < parameters.Length; i++)
+    //         {
+    //             var parameter = parameters[i];
+    //
+    //             if (parameter.ParameterType != valueType)
+    //             {
+    //                 resultParameters[i] = provider.GetRequiredService(parameter.ParameterType);
+    //             }
+    //             else
+    //             {
+    //                 var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
+    //                 var storage = locationKey is not null
+    //                 ? provider.GetRequiredKeyedService<IStorage<TId>>(locationKey)
+    //                     : provider.GetRequiredService<IStorage<TId>>();
+    //
+    //                 var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
+    //                 var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TId), genericValueType);
+    //
+    //                 Activator.CreateInstance(externalValueType, );
+    //             }
+    //         }
+    //
+    //         foreach (var parameter in constructor.GetParameters())
+    //         {
+    //
+    //         }
+    //         foreach (var constructorAttribute in constructor.GetCustomAttributes(true))
+    //         {
+    //             if (constructorAttribute is not InjectAttribute)
+    //                 continue;
+    //
+    //             var parameters = constructor.GetParameters();
+    //             var resultParameters = new object[parameters.Length];
+    //             for (int i = 0; i < parameters.Length; i++)
+    //                 resultParameters[i] = provider.GetRequiredService(parameters[i].ParameterType);
+    //
+    //             constructor.Invoke(instance, parameters);
+    //             return instance!;
+    //         }
+    //     }
+    //
+    //     throw new Exception("Constructor with InjectAttribute was not found");
+    // });
+
+    public IContractResolverChain Build() 
     {
-        if (_serviceProvider == null!)
-            _serviceProvider = _serviceCollection.BuildServiceProvider();
-        
-        if(_resolveKey != null)
-            return _serviceProvider.GetRequiredKeyedService(contract.ImplementationType!, _resolveKey);
-        
-        return _serviceProvider.GetRequiredService(contract.ImplementationType!);
-
-        // _buildServices.AddTransient<TContract>(provider =>
-        // {
-        //     var type = typeof(TImplementation);
-        //     var valueType = typeof(IValue<>);
-        //
-        //     foreach (var constructor in type.GetConstructors())
-        //     {
-        //         if (constructor.GetCustomAttribute<InjectAttribute>() is null)
-        //             continue;
-        //
-        //         var parameters = constructor.GetParameters();
-        //         var resultParameters = new object[parameters.Length];
-        //
-        //         for (var i = 0; i < parameters.Length; i++)
-        //         {
-        //             var parameter = parameters[i];
-        //
-        //             if (parameter.ParameterType != valueType)
-        //             {
-        //                 resultParameters[i] = provider.GetRequiredService(parameter.ParameterType);
-        //             }
-        //             else
-        //             {
-        //                 var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
-        //                 var storage = locationKey is not null
-        //                 ? provider.GetRequiredKeyedService<IStorage<TId>>(locationKey)
-        //                     : provider.GetRequiredService<IStorage<TId>>();
-        //
-        //                 var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
-        //                 var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TId), genericValueType);
-        //
-        //                 Activator.CreateInstance(externalValueType, );
-        //             }
-        //         }
-        //
-        //         foreach (var parameter in constructor.GetParameters())
-        //         {
-        //
-        //         }
-        //         foreach (var constructorAttribute in constructor.GetCustomAttributes(true))
-        //         {
-        //             if (constructorAttribute is not InjectAttribute)
-        //                 continue;
-        //
-        //             var parameters = constructor.GetParameters();
-        //             var resultParameters = new object[parameters.Length];
-        //             for (int i = 0; i < parameters.Length; i++)
-        //                 resultParameters[i] = provider.GetRequiredService(parameters[i].ParameterType);
-        //
-        //             constructor.Invoke(instance, parameters);
-        //             return instance!;
-        //         }
-        //     }
-        //
-        //     throw new Exception("Constructor with InjectAttribute was not found");
-        // });
-
-        //Ne amozh silno sinok
+        var provider = _serviceCollection.BuildServiceProvider();
+        var resolveKey = _resolveKey;
+        //return new ContractResolverChain(provider, resolveKey);
+        throw new NotImplementedException();
     }
 
-    public ObjectTemplateConfiguration SetResolveKey(object? resolveKey)
+    public ContractResolveBuilder SetResolveKey(object? resolveKey)
     {
         _resolveKey = resolveKey;
         return this;
     }
 
-    public ObjectTemplateConfiguration Add<TInterface, TImplementation>(object? key = null)
+    public ContractResolveBuilder Add<TInterface, TImplementation>(object? key = null)
     {
         if (key == null)
             _serviceCollection.AddTransient(typeof(TInterface), ResolveFromProvider<TImplementation>);
@@ -323,7 +580,7 @@ public class ObjectTemplateConfiguration : IContractResolver
         return this;
     }
 
-    public ObjectTemplateConfiguration AddResolution<TInterface, TImplementation>(object? key = null)
+    public ContractResolveBuilder AddResolution<TInterface, TImplementation>(object? key = null)
     {
         if (key == null)
             _serviceCollection.AddTransient(typeof(TInterface), typeof(TImplementation));
@@ -333,7 +590,7 @@ public class ObjectTemplateConfiguration : IContractResolver
         return this;
     }
 
-    public ObjectTemplateConfiguration ResolveFromAnotherKey<TType>(object? key, object? targetKey)
+    public ContractResolveBuilder ResolveFromAnotherKey<TType>(object? key, object? targetKey)
     {
         _serviceCollection.AddKeyedTransient(typeof(TType), key, ResolveFromAnotherKey<TType>(targetKey));
         return this;
@@ -368,12 +625,12 @@ public class ObjectTemplateConfiguration : IContractResolver
                         ? serviceProvider.GetRequiredKeyedService<IStorage<TImplementation>>(locationKey)
                         : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
         
-                    var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
-                    var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
-        
-                    var instance = Activator.CreateInstance(externalValueType,);
-                    constructor.Invoke(instance, resultParameters);
-                    return instance!;
+                    // var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
+                    // var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
+
+                    // var instance = Activator.CreateInstance(externalValueType,);
+                    // constructor.Invoke(instance, resultParameters);
+                    // return instance!;
                 }
             }
         }
@@ -411,11 +668,11 @@ public class ObjectTemplateConfiguration : IContractResolver
                         : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
         
                     var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
-                    var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
+                    //var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
         
-                    var instance = Activator.CreateInstance(externalValueType,);
-                    constructor.Invoke(instance, resultParameters);
-                    return instance!;
+                    //var instance = Activator.CreateInstance(externalValueType,);
+                    //constructor.Invoke(instance, resultParameters);
+                    //return instance!;
                 }
             }
         }
@@ -462,129 +719,9 @@ public class Object<TId> : IObject
         return (TContract)_contracts[typeof(TContract)];
     }
 }
-
 public interface IObject
 {
     TContract Get<TContract>() where TContract : class;
 }
 
-public interface ITestContract
-{
-}
-
-public class TestContract : ITestContract
-{
-    private readonly IValue<int> _value1;
-    private readonly IValue<int> _value2;
-
-    public TestContract(IValue<int> value1, [InFile] IValue<int> value2)
-    {
-        _value1 = value1;
-        _value2 = value2;
-    }
-}
-
-public class Test
-{
-    public static void Main()
-    {
-        var gameConfig = new ServiceCollection();
-        gameConfig.AddDefaultMemoryStorage();
-
-        var gameServices = gameConfig.BuildServiceProvider();
-
-        // Using
-
-        var defaultStorage = gameServices.GetRequiredService<IStorage<int>>();
-        var inMemoryStorage = gameServices.GetRequiredKeyedService<IStorage<int>>(typeof(InMemoryAttribute));
-
-        var floatBucket = defaultStorage.GetBucket<float>();
-        var externalValue = new ExternalValue<int, float>(0, floatBucket);
-
-        externalValue.Value = 10;
-
-        var snakeTemplateBuilder = new ObjectTemplateBuilder();
-        snakeTemplateBuilder.Add<ITestContract, TestContract>();
-        snakeTemplateBuilder.Add<ITestContract>();
-
-
-        Game(new GuidGenerator());
-        Game(new IncrementalGenerator<int>());
-    }
-
-    private static void Game<TId>(IGenerator<TId> idGenerator)
-    {
-        var templateBuilder = new ObjectTemplateBuilder()
-            .Add<IPosition, DefaultPosition>();
-
-        var template = templateBuilder.Build();
-
-        var objectBuilder = new ObjectBuilder(template)
-            .SetResolver(new ObjectTemplateConfiguration())
-            .SetObjectFactory(new DefaultObjectFactory<int>(new IncrementalGenerator<int>()));
-
-
-        var obj1 = objectBuilder.Build();
-        var obj2 = objectBuilder.Build();
-        var obj3 = objectBuilder.Build();
-
-        var positionGenerator = GetDefaultPositionGenerator(idGenerator);
-
-        var serviceCollection = new ServiceCollection()
-            .AddSingleton(idGenerator)
-            .AddScoped<IGenerator<IPosition, ITypeRead<IGenerator<object>>>, DefaultPositionGenerator>();
-
-        var serviceProvider = serviceCollection.BuildServiceProvider();
-        IGenerator<TId>? idGen1 = serviceProvider.GetService<IGenerator<TId>>();
-        IGenerator<TId> idGen2 = serviceProvider.GetRequiredService<IGenerator<TId>>();
-
-        using (var scope = serviceProvider.CreateScope())
-        {
-            // Unique position generator instance for this scope
-            var scopedPositionGenerator = scope.ServiceProvider
-                .GetRequiredService<IGenerator<IPosition, ITypeRead<IGenerator<object>>>>();
-        }
-
-
-        var playerTemplate = (dynamic)new object();
-        // new Container.ObjectTemplate();
-        playerTemplate.Add<IPosition>();
-
-        var player = playerTemplate.Create();
-        //player.Set<IPosition>(positionGenerator.Generate());
-    }
-
-    public static IGenerator<IPosition> GetDefaultPositionGenerator<TId>(IGenerator<TId> idGenerator)
-    {
-        IReadWrite<TId, Vector2> positions = new MemoryRepository<TId, Vector2>();
-        IGenerator<IValue<Vector2>> positionValueGenerator =
-            new ExternalValueGenerator<TId, Vector2>(idGenerator, positions);
-        GeneratorOverGenerator<IValue<Vector2>> lazyPositionValueGenerator =
-            new GeneratorOverGenerator<IValue<Vector2>>(positionValueGenerator, new LazyValueGenerator<Vector2>());
-
-        ITypeReadWrite<IGenerator<object>>
-            valueGenerators = new TypeRepository<IGenerator<object>>(); // fix it pls later pls pls pls
-        valueGenerators.Write(lazyPositionValueGenerator);
-
-        ITypeRead<IGenerator<object>> universalGenerator = valueGenerators;
-
-        var positionGenerator = CreateContractGenerator(universalGenerator, new DefaultPositionGenerator());
-        return positionGenerator;
-    }
-
-    public static IGenerator<TContract> CreateContractGenerator<TContract>(
-        ITypeRead<IGenerator<object>> universalGenerator,
-        IGenerator<TContract, ITypeRead<IGenerator<object>>> contractGenerator)
-    {
-        // return new GeneratorCache<TContract>(universalGenerator, contractGenerator);
-        return null;
-    }
-}
-
-public class DefaultMoga : IAmoga
-{
-}
-
-public interface IAmoga
-{
-}
+public class ValueLocationAttribute : Attribute { }
