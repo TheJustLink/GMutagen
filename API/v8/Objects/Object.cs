@@ -18,68 +18,6 @@ public interface IGenerator<out TOut, in TIn> : IRead<TIn, TOut>
     TOut Generate(TIn input);
 }
 
-public abstract class GeneratorDecorator<T> : IGenerator<T>
-{
-    protected IGenerator<T> Child;
-
-    public GeneratorDecorator(IGenerator<T> child)
-    {
-        Child = child;
-    }
-
-    public virtual T Generate()
-    {
-        return Child.Generate();
-    }
-}
-
-public class GeneratorAdapter<TResult, TId> : IGenerator<TResult, TId>
-{
-    protected readonly IGenerator<TResult> Child;
-
-    public GeneratorAdapter(IGenerator<TResult> child)
-    {
-        Child = child;
-    }
-
-    public TResult this[TId id] => Read(id);
-
-    public virtual TResult Read(TId id)
-    {
-        return this[id];
-    }
-
-    public virtual TResult Generate(TId input)
-    {
-        return Child.Generate();
-    }
-}
-
-public class GeneratorAdapter2<TResult, TId> : IGenerator<TResult>
-{
-    protected readonly IGenerator<TId> IdGenerator;
-    protected readonly IGenerator<TResult, TId> Child;
-
-    public GeneratorAdapter2(IGenerator<TResult, TId> child, IGenerator<TId> idGenerator)
-    {
-        Child = child;
-        IdGenerator = idGenerator;
-    }
-
-    public TResult this[TId id] => Read(id);
-
-    public virtual TResult Read(TId id)
-    {
-        return this[id];
-    }
-
-    public virtual TResult Generate()
-    {
-        var id = IdGenerator.Generate();
-        return Child.Generate(id);
-    }
-}
-
 public class Object : IObject
 {
     private readonly Dictionary<Type, ContractStub> _staticContracts;

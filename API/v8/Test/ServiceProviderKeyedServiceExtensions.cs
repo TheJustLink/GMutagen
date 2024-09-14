@@ -1,19 +1,16 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
 using System.Reflection;
+using System.Linq;
+
 using Microsoft.Extensions.DependencyInjection;
 
-using GMutagen.v8.Id;
 using GMutagen.v8.IO;
 using GMutagen.v8.IO.Repositories;
 using GMutagen.v8.Objects;
 using GMutagen.v8.Objects.Template;
 using GMutagen.v8.Values;
-using System.Diagnostics.Contracts;
-using System.Linq;
-using System.Reflection.Metadata;
-using System.Data.Common;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace GMutagen.v8.Test;
 
@@ -40,112 +37,43 @@ public static class CustomAttributeDataExtensions
 {
     public static bool Contains<T>(this IEnumerable<CustomAttributeData> attributes)
     {
-        foreach (var attribute in attributes) 
-        {
-            if(attribute.AttributeType.IsAssignableTo(typeof(T)))
-                return true;
-        }
-
-        return false;
+        return attributes.Any(attribute => attribute.AttributeType.IsAssignableTo(typeof(T)));
     }
-
     public static CustomAttributeData? Get<T>(this IEnumerable<CustomAttributeData> attributes)
     {
-        foreach (var attribute in attributes)
-        {
-            if (attribute.AttributeType.IsAssignableTo(typeof(T)))
-                return attribute;
-        }
-
-        return null;
+        return attributes.FirstOrDefault(attribute => attribute.AttributeType.IsAssignableTo(typeof(T)));
     }
 }
 
-public class Storage<TId> : IStorage<TId>
-{
-    private readonly IBucketFactory<TId> _bucketFactory;
-
-    private readonly Dictionary<Type, object> _buckets = new();
-
-    public Storage(IBucketFactory<TId> bucketFactory)
-    {
-        _bucketFactory = bucketFactory;
-    }
-
-    public TValue Read<TValue>(TId id) => GetBucket<TValue>().Read(id);
-    public void Write<TValue>(TId id, TValue value) => GetBucket<TValue>().Write(id, value);
-
-    public IReadWrite<TId, T> GetBucket<T>()
-    {
-        if (_buckets.TryGetValue(typeof(T), out var cachedBucket))
-            return (IReadWrite<TId, T>)cachedBucket;
-
-        var newBucket = _bucketFactory.Create<T>();
-        _buckets[typeof(T)] = newBucket;
-
-        return newBucket;
-    }
-    public object GetBucket(Type valueType)
-    {
-        if (_buckets.TryGetValue(valueType, out var cachedBucket))
-            return cachedBucket;
-
-        var newBucket = _bucketFactory.Create(valueType);
-        _buckets[valueType] = newBucket;
-
-        return newBucket;
-    }
-}
-
-public interface IStorage<in TId> : IReadWrite<TId>
-{
-    IReadWrite<TId, TValue> GetBucket<TValue>();
-    object GetBucket(Type valueType);
-}
-
-public interface IBucketFactory<in TId>
-{
-    IReadWrite<TId, T> Create<T>();
-    object Create(Type valueType);
-}
-public class MemoryBucketFactory<TId> : IBucketFactory<TId> where TId : notnull
-{
-    public IReadWrite<TId, T> Create<T>() => new MemoryRepository<TId, T>();
-    public object Create(Type valueType)
-    {
-        var memoryOpenType = typeof(MemoryRepository<,>);
-        var memoryClosedType = memoryOpenType.MakeGenericType(typeof(TId), valueType);
-        
-        return Activator.CreateInstance(memoryClosedType)!;
-    }
-}
 public class InMemoryAttribute : ValueLocationAttribute { }
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddDefaultMemoryStorage<TId>(this IServiceCollection services)
+    public static IServiceCollection AddObjectsInMemory<TId, TSlotId>(this IServiceCollection services, Func<IReadWrite<Type, TSlotId>> factory)
     {
-        var bucketFactory = new MemoryBucketFactory<TId>();
-
-        return services.AddDefaultStorage<TId, InMemoryAttribute>(bucketFactory);
-    }
-    public static IServiceCollection AddDefaultStorage<TId, TKey>(this IServiceCollection services,
-        IBucketFactory<TId> bucketFactory)
-    {
-        var storage = new Storage<TId>(bucketFactory);
-        services.AddKeyedSingleton<IStorage<TId>>(typeof(TKey), storage);
-        services.AddSingleton<IStorage<TId>>(storage);
-
-        return services;
+        return services.AddContractSlotsInMemory<TId, Type, TSlotId>(factory);
     }
 
-    public static IServiceCollection AddStorage<TId, TKey>(this IServiceCollection services,
-        IBucketFactory<TId> bucketFactory)
+    public static IServiceCollection AddContractSlotsInMemory<TId, TSlotId, TValue>(this IServiceCollection services, Func<IReadWrite<TSlotId, TValue>> factory)
     {
-        var storage = new Storage<TId>(bucketFactory);
-        services.AddKeyedSingleton<IStorage<TId>>(typeof(TKey), storage);
+        return AddDeepStorage<TId, TSlotId, TValue>(services, factory);
+    }
+    public static IServiceCollection AddDeepStorage<TId, TDeepId, TValue>(this IServiceCollection services, Func<IReadWrite<TDeepId, TValue>> factory)
+    {
+        var dictionary = new Dictionary<TId, IReadWrite<TDeepId, TValue>>();
+        
+        IRead<TId, IReadWrite<TDeepId, TValue>> contractSlotsReader = new DictionaryRead<TId, IReadWrite<TDeepId, TValue>>(dictionary);
+        IWrite<TId, IReadWrite<TDeepId, TValue>> contractSlotsWriter = new DictionaryWrite<TId, IReadWrite<TDeepId, TValue>>(dictionary);
+        
+        contractSlotsReader = new LazyRead<TId, IReadWrite<TDeepId, TValue>>(contractSlotsReader, contractSlotsWriter, factory);
+        var contractSlotsReadWrite = new ReadWrite<TId, IReadWrite<TDeepId, TValue>>(contractSlotsReader, contractSlotsWriter);
 
-        return services;
+        return services.AddSingleton<IReadWrite<TId, IReadWrite<TDeepId, TValue>>>(contractSlotsReadWrite);
+    }
+
+    public static IServiceCollection AddStorage<TId, TValue>(this IServiceCollection services, Func<IReadWrite<TId, TValue>> factory) 
+    {
+        return services.AddSingleton<IReadWrite<TId, TValue>>(factory());
     }
 }
 
@@ -259,7 +187,7 @@ public interface IObjectFactory
 {
     IObject Create(Dictionary<Type, ContractDescriptor> contracts);
 }
-public class DefaultObjectFactory<TId> : IObjectFactory
+public class DefaultObjectFactory<TId> : IObjectFactory where TId : notnull
 {
     private readonly IGenerator<TId> _idGenerator;
     private readonly IContractResolver _contractResolver;
@@ -273,6 +201,7 @@ public class DefaultObjectFactory<TId> : IObjectFactory
     public IObject Create(Dictionary<Type, ContractDescriptor> contracts)
     {
         var id = _idGenerator.Generate();
+        Console.WriteLine("CREATING OBJECT " + id);
         var implementations = new Dictionary<Type, object>(contracts.Count);
 
         foreach (var contract in contracts.Values)
@@ -285,16 +214,20 @@ public class DefaultObjectFactory<TId> : IObjectFactory
 public class ObjectContractResolver : IContractResolver
 {
     private readonly IContractResolverChain _resolverChain;
+    private readonly IServiceCollection _buildServices;
 
-    public ObjectContractResolver(IContractResolverChain resolverChain)
+    public ObjectContractResolver(IContractResolverChain resolverChain, IServiceCollection buildServices)
     {
         _resolverChain = resolverChain;
+        _buildServices = buildServices;
     }
 
-    public object Resolve<TId>(ContractDescriptor contract, TId id)
+    public object Resolve<TId>(ContractDescriptor contract, TId id) where TId : notnull
     {
-        var context = new ContractResolverContext(contract);
-        context.Id = id;
+        var buildServices = new ServiceCollection { _buildServices };
+        buildServices.AddSingleton(new ObjectId(typeof(TId), id));
+
+        var context = new ContractResolverContext(contract, buildServices);
         
         if (_resolverChain.Resolve(context) && context.Result is not null)
             return context.Result;
@@ -302,9 +235,36 @@ public class ObjectContractResolver : IContractResolver
         throw new InvalidOperationException($"Can't resolve {context.Contract.Type}");
     }
 }
+class ObjectId : Id
+{
+    public ObjectId(Type type, object value) : base(type, value) { }
+}
+class ContractId : Id
+{
+    public ContractId(Type type, object value) : base(type, value) { }
+}
+class SlotId : Id
+{
+    public SlotId(Type type, object value) : base(type, value) { }
+}
+class ValueId : Id
+{
+    public ValueId(Type type, object value) : base(type, value) { }
+}
+public class Id
+{
+    public readonly Type Type;
+    public readonly object Value;
+
+    public Id(Type type, object value)
+    {
+        Type = type;
+        Value = value;
+    }
+}
 public interface IContractResolver
 {
-    object Resolve<TId>(ContractDescriptor contract, TId id);
+    object Resolve<TId>(ContractDescriptor contract, TId id) where TId : notnull;
 }
 
 public class ContractResolverFromDescriptor : IContractResolverChain
@@ -325,8 +285,7 @@ public class ContractResolverFromDescriptor : IContractResolverChain
             return false;
 
         var implementationContract = new ContractDescriptor(context.Contract.ImplementationType);
-        var implementationContext = new ContractResolverContext(implementationContract);
-        implementationContext.Id = context.Id;
+        var implementationContext = new ContractResolverContext(implementationContract, context.BuildServices);
 
         if (_implementationTypeResolver.Resolve(implementationContext) is false || implementationContext.Result is null)
             return false;
@@ -335,18 +294,41 @@ public class ContractResolverFromDescriptor : IContractResolverChain
         return true;
     }
 }
-public class ContractResolverFromConstructor : IContractResolverChain
+public class ContractResolverFromConstructor<TObjectId, TContractId> : IContractResolverChain
 {
     private readonly IContractResolverChain _parameterResolver;
-    public ContractResolverFromConstructor(IContractResolverChain parameterResolver)
+    private readonly IGenerator<TContractId> _contractIdGenerator;
+    public ContractResolverFromConstructor(IContractResolverChain parameterResolver, IGenerator<TContractId> contractIdGenerator)
     {
         _parameterResolver = parameterResolver;
+        _contractIdGenerator = contractIdGenerator;
     }
 
     public bool Resolve(ContractResolverContext context)
     {
-        var constructors = context.Contract.Type.GetConstructors();
+        var services = context.Services;
+        var objectIdDescriptor = services.GetRequiredService<ObjectId>();
 
+        var objects = services.GetRequiredService<IReadWrite<TObjectId, IReadWrite<Type, TContractId>>>();
+        if (objectIdDescriptor.Value is not TObjectId objectId)
+            return false;
+
+        var contractType = context.Contract.Type;
+        var contracts = objects[objectId];
+        TContractId contractId;
+        
+        if (contracts.Contains(contractType))
+        {
+            contractId = contracts[contractType];
+        }
+        else
+        {
+            contractId = _contractIdGenerator.Generate();
+            contracts[contractType] = contractId;
+        }
+        context.BuildServices.AddSingleton(new ContractId(typeof(TContractId), contractId));
+
+        var constructors = contractType.GetConstructors();
         return constructors.Any(constructor => ResolveConstructor(context, constructor));
     }
 
@@ -357,43 +339,86 @@ public class ContractResolverFromConstructor : IContractResolverChain
 
         for (var i = 0; i < parameters.Length; i++)
         {
-            var parameter = parameters[i];
+            var parameterInfo = parameters[i];
+            context.BuildServices.AddSingleton(new SlotId(i.GetType(), i));
 
-            var parameterContract = new ContractDescriptor(parameter.ParameterType);
-            var parameterContext = new ContractResolverContext(parameterContract);
-            parameterContext.Id = context.Id;
-            parameterContext.Attributes = parameter.CustomAttributes.ToArray();
-
-            if (_parameterResolver.Resolve(parameterContext) is false || parameterContext.Result is null)
+            if (ResolveParameter(context, parameterInfo, out var parameter) is false)
                 return false;
 
-            resultParameters[i] = parameterContext.Result;
+            resultParameters[i] = parameter!;
         }
 
         context.Result = constructor.Invoke(resultParameters);
         return true;
     }
+    private bool ResolveParameter(ContractResolverContext context, ParameterInfo parameterInfo, out object? parameter)
+    {
+        parameter = default;
+
+        var parameterContract = new ContractDescriptor(parameterInfo.ParameterType);
+        var parameterContext = new ContractResolverContext(parameterContract, context.BuildServices);
+        parameterContext.Attributes = parameterInfo.CustomAttributes.ToArray();
+
+        if (_parameterResolver.Resolve(parameterContext) is false || parameterContext.Result is null)
+            return false;
+
+        parameter = parameterContext.Result;
+
+        return true;
+    }
 }
-public class ValueResolverFromStorage<TId> : IContractResolverChain
+public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContractResolverChain
 {
     private readonly IContractResolverChain _storageResolver;
-    public ValueResolverFromStorage(IContractResolverChain storageResolver)
+    private readonly IGenerator<TValueId> _valueIdGenerator;
+    public ValueResolverFromStorage(IContractResolverChain storageResolver, IGenerator<TValueId> valueIdGenerator)
     {
         _storageResolver = storageResolver;
+        _valueIdGenerator = valueIdGenerator;
     }
 
     public bool Resolve(ContractResolverContext context)
     {
-        if (context.Contract.Type.IsAssignableTo(typeof(IValue)) is false || context.Id is not TId)
+        if (context.Contract.Type.IsAssignableTo(typeof(IValue)) is false)
             return false;
 
-        var genericValueType = context.Contract.Type.GenericTypeArguments[0];
-        var idType = typeof(TId);
-        var externalValueType = typeof(ExternalValue<,>).MakeGenericType(idType, genericValueType);
-        
-        var storageContract = new ContractDescriptor(typeof(IStorage<TId>));
-        var storageResolverContext = new ContractResolverContext(storageContract);
-        storageResolverContext.Id = context.Id;
+        return ResolveStorage(context, out var storage) && Resolve(context, storage!);
+    }
+
+    private bool Resolve(ContractResolverContext context, IReadWrite<TValueId, object> valuesStorage)
+    {
+        var services = context.Services;
+        var contractIdDescriptor = services.GetRequiredService<ContractId>();
+        var slotIdDescriptor = services.GetRequiredService<SlotId>();
+
+        var contracts = services.GetRequiredService<IReadWrite<TContractId, IReadWrite<TSlotId, TValueId>>>();
+        if (contractIdDescriptor.Value is not TContractId contractId || slotIdDescriptor.Value is not TSlotId slotId)
+            return false;
+
+        var slots = contracts.Read(contractId);
+        TValueId valueId;
+        if (slots.Contains(slotId))
+        {
+            valueId = slots[slotId];
+        }
+        else
+        {
+            valueId = _valueIdGenerator.Generate();
+            slots[slotId] = valueId;
+        }
+
+        var valueType = context.Contract.Type.GenericTypeArguments[0];
+        context.Result = CreateExternalValue(valueType, valueId, valuesStorage);
+
+        return true;
+    }
+    private bool ResolveStorage(ContractResolverContext context, out IReadWrite<TValueId, object>? storage)
+    {
+        storage = null;
+
+        var valuesStorageType = typeof(IReadWrite<TValueId, object>);
+        var storageContract = new ContractDescriptor(valuesStorageType);
+        var storageResolverContext = new ContractResolverContext(storageContract, context.BuildServices);
 
         if (context.Attributes is not null)
         {
@@ -405,11 +430,17 @@ public class ValueResolverFromStorage<TId> : IContractResolverChain
         if (_storageResolver.Resolve(storageResolverContext) is false || storageResolverContext.Result is null)
             return false;
 
-        var storage = (storageResolverContext.Result as IStorage<TId>)!;
-        var bucket = storage.GetBucket(genericValueType);
-
-        context.Result = Activator.CreateInstance(externalValueType, context.Id, bucket);
+        storage = (storageResolverContext.Result as IReadWrite<TValueId, object>)!;
         return true;
+    }
+    private object CreateExternalValue(Type valueType, TValueId valueId, IReadWrite<TValueId, object> storage)
+    {
+        var idType = typeof(TValueId);
+        var readWriteTypeCastedType = typeof(ReadWriteTypeCasted<,>).MakeGenericType(idType, valueType);
+        var externalValueType = typeof(ExternalValue<,>).MakeGenericType(idType, valueType);
+
+        var readWriteTypeCasted = Activator.CreateInstance(readWriteTypeCastedType, storage)!;
+        return Activator.CreateInstance(externalValueType, valueId, readWriteTypeCasted)!;
     }
 }
 public class ContractResolverFromContainer : IContractResolverChain
@@ -454,16 +485,21 @@ public interface IContractResolverChain
 }
 public class ContractResolverContext
 {
-    public ContractDescriptor Contract;
-    public object? Id;
+    public readonly ContractDescriptor Contract;
+    public readonly IServiceCollection BuildServices;
+
     public object? Key;
-    public CustomAttributeData[]? Attributes;
     public object? Result;
 
-    public ContractResolverContext(ContractDescriptor contract)
+    public CustomAttributeData[]? Attributes;
+
+    public ContractResolverContext(ContractDescriptor contract, IServiceCollection services)
     {
         Contract = contract;
+        BuildServices = services;
     }
+
+    public IServiceProvider Services => BuildServices.BuildServiceProvider();
 }
 
 public class ContractResolver : IContractResolverChain
@@ -621,10 +657,10 @@ public class ContractResolveBuilder
                 else
                 {
                     var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
-                    var storage = locationKey is not null
-                        ? serviceProvider.GetRequiredKeyedService<IStorage<TImplementation>>(locationKey)
-                        : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
-        
+                    // var storage = locationKey is not null
+                    //     ? serviceProvider.GetRequiredKeyedService<IStorage<TImplementation>>(locationKey)
+                    //     : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
+                    //
                     // var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
                     // var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
 
@@ -662,12 +698,12 @@ public class ContractResolveBuilder
                 }
                 else
                 {
-                    var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
-                    var storage = locationKey is not null
-                    ? serviceProvider.GetRequiredKeyedService<IStorage<TImplementation>>(locationKey)
-                        : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
-        
-                    var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
+                    // var locationKey = parameter.GetCustomAttribute<ValueLocationAttribute>();
+                    // var storage = locationKey is not null
+                    // ? serviceProvider.GetRequiredKeyedService<IStorage<TImplementation>>(locationKey)
+                    //     : serviceProvider.GetRequiredService<IStorage<TImplementation>>();
+                    //
+                    // var genericValueType = parameter.ParameterType.GenericTypeArguments[0];
                     //var externalValueType = typeof(ExternalValue<,>).MakeGenericType(typeof(TImplementation), genericValueType,);
         
                     //var instance = Activator.CreateInstance(externalValueType,);
@@ -725,3 +761,49 @@ public interface IObject
 }
 
 public class ValueLocationAttribute : Attribute { }
+
+
+public class TestMemory<TValue> : IReadWrite<int, TValue>, IGenerator<int>
+{
+    private readonly List<TValue> _memory = new();
+    private readonly LinkedList<int> _nextFree = new();
+
+    public TValue this[int id]
+    {
+        get => Read(id);
+        set => Write(id, value);
+    }
+
+    public TValue Read(int id)
+    {
+        return _memory[id];
+    }
+
+    public void Write(int id, TValue value)
+    {
+        if (id < _memory.Count)
+            _memory[id] = value;
+        else
+            _memory.Add(value);
+    }
+
+    public void Release(int id)
+    {
+        _nextFree.AddFirst(id);
+    }
+
+    public int Generate()
+    {
+        if (_nextFree.First == null)
+            return _memory.Count;
+
+        var value = _nextFree.First.Value;
+        _nextFree.RemoveFirst();
+        return value;
+    }
+
+    public bool Contains(int id)
+    {
+        return id < _memory.Count;
+    }
+}

@@ -7,14 +7,8 @@ namespace GMutagen.v8.Id;
 
 public class IncrementalGenerator<T> : IValue<T>, IGenerator<T> where T : IAdditionOperators<T, int, T>
 {
-    public IncrementalGenerator() : this(default)
-    {
-    }
-
-    public IncrementalGenerator(T value)
-    {
-        Value = value;
-    }
+    public IncrementalGenerator() : this(default!) { }
+    public IncrementalGenerator(T value) => Value = value;
 
     public T Value { get; set; }
 

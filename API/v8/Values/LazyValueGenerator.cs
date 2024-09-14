@@ -8,4 +8,5 @@ public class LazyValueGenerator<T> : IGenerator<LazyValue<T>, IGenerator<IValue<
 
     public LazyValue<T> this[IGenerator<IValue<T>> id] => Read(id);
     public LazyValue<T> Read(IGenerator<IValue<T>> id) => Generate(id);
+    public bool Contains(IGenerator<IValue<T>> id) => false; // TODO ???
 }

@@ -8,17 +8,13 @@ public class ExternalValue<TId, TValue> : IValue<TValue>
     private readonly IRead<TId, TValue> _reader;
     private readonly IWrite<TId, TValue> _writer;
 
-    public ExternalValue(TId id, IReadWrite<TId, TValue> readWrite) : this(id, readWrite, readWrite)
-    {
-
-    }
-
+    public ExternalValue(TId id, IReadWrite<TId, TValue> readWrite)
+        : this(id, readWrite, readWrite) { }
     public ExternalValue(TId id, IRead<TId, TValue> reader, IWrite<TId, TValue> writer)
     {
         _id = id;
         _reader = reader;
         _writer = writer;
-        _writer.Write(id, default);
     }
 
     public TValue Value

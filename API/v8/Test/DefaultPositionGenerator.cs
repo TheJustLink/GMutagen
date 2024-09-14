@@ -18,4 +18,5 @@ public class DefaultPositionGenerator : IGenerator<IPosition, ITypeRead<IGenerat
 
     public IPosition this[ITypeRead<IGenerator<object>> id] => Read(id);
     public IPosition Read(ITypeRead<IGenerator<object>> id) => Generate(id);
+    public bool Contains(ITypeRead<IGenerator<object>> id) => false; // TODO ???
 }
