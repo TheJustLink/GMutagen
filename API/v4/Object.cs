@@ -13,7 +13,7 @@ class Test
         // var bulletTemplate = new ObjectTemplate();
         // bulletTemplate.Add<IPosition>(new DefaultPosition());
 
-        // var obj = objectCreator.Create(bulletTemplate);
+        // var obj = objectCreator.CreateRead(bulletTemplate);
 
         // player
         // IPosition // IRead // IWrite
@@ -81,7 +81,7 @@ class Test
 
         // desc.Set<IPosition>(????????????????);
 
-        // var position = obj.Create<IPosition>();
+        // var position = obj.CreateRead<IPosition>();
         // position.Set(0, "position"); // Id ?
 
 
@@ -125,7 +125,7 @@ class Test
         //
         // objects[0][typeof(PreviousPosition)] = 2
         //
-        // positions = contracts3.Create<Vector3>()
+        // positions = contracts3.CreateRead<Vector3>()
         // positions[0] = new Vector3();
         // positions[0] = new Vector3();
         // positions[2] = new Vector3(); // previous position
@@ -138,7 +138,7 @@ class Test
         // objects[0][typeof(Position)] = new(typeof(Vector2), 1)
         // objects[0][typeof(PreviousPosition)] = new(typeof(Vector2), 2)
         //
-        // positions = contracts3.Create<Vector2>()
+        // positions = contracts3.CreateRead<Vector2>()
         // positions[0] = new Vector3();
         // positions[1] = new Vector3(); // position
         // positions[2] = new Vector3(); // previous position

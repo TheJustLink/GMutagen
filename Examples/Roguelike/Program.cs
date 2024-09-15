@@ -5,27 +5,29 @@ using System.IO;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using GMutagen.v8.Id;
 using GMutagen.v8.IO;
-using GMutagen.v8.IO.Repositories;
-using GMutagen.v8.Test;
 using GMutagen.v8.Values;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Bson;
-using System.Security.Cryptography;
+
+using GMutagen.v8.Generators;
+using GMutagen.v8.Contracts.Resolving;
+using GMutagen.v8.Contracts.Resolving.Attributes;
+using GMutagen.v8.Contracts.Resolving.Nodes;
+using GMutagen.v8.Objects;
+using GMutagen.v8.Objects.Templates;
+using GMutagen.v8.Contracts;
+using GMutagen.v8.IO.Sources.Dictionary;
 
 namespace Roguelike;
 
 public class InLoggerAttribute : ValueLocationAttribute { }
-
 public interface ITestContract
 {
     IValue<int> Number1 { get; set; }
     IValue<int> Number2 { get; set; }
 }
-
 public class TestContract : ITestContract
 {
     public IValue<int> Number1 { get; set; }
@@ -37,7 +39,7 @@ public class TestContract : ITestContract
         Number2 = number2;
     }
 }
-public class LoggerRepository<TId, TValue> : IReadWrite<TId, TValue>
+public class LoggerRepository<TId, TValue> : IReadWrite<TId, TValue> where TId : notnull
 {
     private readonly IReadWrite<TId, TValue> _source;
 
@@ -77,7 +79,8 @@ public class LoggerRepository<TId, TValue> : IReadWrite<TId, TValue>
         return new LoggerRepository<TId, TValue>(source);
     }
 }
-public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>
+public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>, IDisposable
+    where TId : notnull
 {
     private readonly IReadWrite<TId, TValue> _source;
     private readonly FileStream _stream;
@@ -93,7 +96,12 @@ public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>
             var reader = new StreamReader(_stream);
 
             var settings = new JsonSerializerSettings();
+            settings.MetadataPropertyHandling = MetadataPropertyHandling.Ignore;
+            settings.TypeNameHandling = TypeNameHandling.None;
+            settings.TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple;
+            settings.Converters.Add(new SimpleTypeConverter());
             settings.Converters.Add(new TypeAwareConverter());
+            settings.Converters.Add(new SimpleTypeDictionaryConverter());
 
             _lines = JsonConvert.DeserializeObject<Dictionary<TId, TValue>>(reader.ReadToEnd(), settings) ?? new();
 
@@ -133,11 +141,17 @@ public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>
         return value;
     }
 
-    public void Flush()
+    public void Dispose()
     {
+        Console.WriteLine("Dispose save " + this);
+
         var settings = new JsonSerializerSettings();
+        settings.TypeNameHandling = TypeNameHandling.None;
+        settings.TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple;
+        settings.Converters.Add(new SimpleTypeConverter());
         settings.Converters.Add(new TypeAwareConverter());
-        
+        settings.Converters.Add(new SimpleTypeDictionaryConverter());
+
         var json = JsonConvert.SerializeObject(_lines, settings);
         _stream.Position = 0;
         var writer = new StreamWriter(_stream);
@@ -155,41 +169,68 @@ public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>
         _stream.Close();
     }
 }
+public class FileReadWriteFactory : IReadWriteFactory
+{
+    private readonly IReadWriteFactory _sourceStorageFactory;
+    private readonly string _defaultFilePath;
+    public FileReadWriteFactory(IReadWriteFactory sourceStorageFactory, string defaultFilePath)
+    {
+        _sourceStorageFactory = sourceStorageFactory;
+        _defaultFilePath = defaultFilePath;
+    }
+
+    public IReadWrite<TId, TValue> CreateReadWrite<TId, TValue>() where TId : notnull
+    {
+        var source = _sourceStorageFactory.CreateReadWrite<TId, TValue>();
+
+        return new FileRepository<TId, TValue>(source, _defaultFilePath);
+    }
+    public IReadWrite<TId, TValue> Create<TId, TValue>(string filePath) where TId : notnull
+    {
+        var source = _sourceStorageFactory.CreateReadWrite<TId, TValue>();
+
+        return new FileRepository<TId, TValue>(source, filePath);
+    }
+}
 
 static class Program
 {
-    public static FileRepository<TId, TValue> CreateRepo<TId, TValue>(string filename)
+    private static IServiceCollection AddStorages<TObjectId, TContractId, TSlotId, TValueId>(this IServiceCollection services)
+        where TObjectId : notnull
+        where TContractId : notnull
+        where TSlotId : notnull
+        where TValueId : notnull
     {
-        return new FileRepository<TId, TValue>(LoggerRepository<TId, TValue>.Create(DictionaryReadWrite<TId, TValue>.Create()),
-            Path.Combine(Environment.CurrentDirectory, filename));
+        var dictionaryStorageFactory = new DictionaryReadWriteFactory();
+        var fileStorageFactory = new FileReadWriteFactory(dictionaryStorageFactory, "Default.txt");
+
+        // Values ValueId:Value
+        var valuesStorage = fileStorageFactory.Create<TValueId, object>("Values.txt");
+        services.AddSingleton(sp => valuesStorage);
+        // ContractSlots ContractId:ContractValue(SlotId:ValueId)
+        var contractsStorage = fileStorageFactory.Create<TContractId, ContractValue<TSlotId, TValueId>>("Contracts.txt");
+        services.AddSingleton(sp => contractsStorage);
+        // Objects ObjectId:ObjectValue(ContractType:ContractId)
+        var objectStorage = fileStorageFactory.Create<TObjectId, ObjectValue<TContractId>>("Objects.txt");
+        services.AddSingleton(sp => objectStorage);
+
+        return services;
     }
 
     public static void Main(string[] args)
     {
-        var gameConfig = new ServiceCollection();
+        var gameConfig = new ServiceCollection()
+            .AddStorages<int, int, int, int>();
 
-        // Values ValueId:Value
-        var valuesRepo = CreateRepo<int, object>("Values.txt");
-        gameConfig.AddStorage(() => valuesRepo);
-        // ContractSlots ContractId:[SlotId:ValueId]
-        var contractSlotsRepo = CreateRepo<int, int>("Contracts.txt");
-        gameConfig.AddContractSlotsInMemory<int, int, int>(() => contractSlotsRepo);
-        // Objects ObjectId:[ContractType:ContractId]
-        var objectsRepo = CreateRepo<Type, int>("Objects.txt");
-        gameConfig.AddObjectsInMemory<int, int>(() => objectsRepo);
+        using var gameServices = gameConfig.BuildServiceProvider();
 
-
-        var gameServices = gameConfig.BuildServiceProvider();
-
-
-        var compositeResolver = new CompositeContractResolverChain();
+        var compositeResolver = new CompositeContractResolverNode();
         compositeResolver.Add(new ContractResolverFromDescriptor(compositeResolver))
             .Add(new ContractResolverFromContainer(gameServices))
-            .Add(new ValueResolverFromStorage<int, int, int>(compositeResolver, new IncrementalGenerator<int>()))
-            .Add(new ContractResolverFromConstructor<int, int>(compositeResolver, new IncrementalGenerator<int>()));
+            .Add(new ValueResolverFromStorage<int, int, int>(gameServices, compositeResolver, new IncrementalGenerator<int>()))
+            .Add(new ContractResolverFromConstructor<int, int>(gameServices, compositeResolver, new IncrementalGenerator<int>()));
 
-        var objectContractResolver = new ObjectContractResolver(compositeResolver, gameConfig);
-        var objectFactory = new DefaultObjectFactory<int>(new IncrementalGenerator<int>(), objectContractResolver);
+        var objectFactory = new ResolvingObjectFactory<int>(new IncrementalGenerator<int>(), compositeResolver);
 
 
         var snakeTemplate = new ObjectTemplateBuilder()
@@ -209,12 +250,12 @@ static class Program
 
             Console.WriteLine("");
             Console.WriteLine("Before");
-            //Console.WriteLine(testContract.Number1.Value);
-            //Console.WriteLine(testContract.Number2.Value);
+            Console.WriteLine(testContract.Number1.Value);
+            Console.WriteLine(testContract.Number2.Value);
 
 
-            testContract.Number1.Value = i;
-            testContract.Number2.Value = i * 2;
+            testContract.Number1.Value += i;
+            testContract.Number2.Value += i * 2;
 
             Console.WriteLine("");
             Console.WriteLine("After");
@@ -222,9 +263,7 @@ static class Program
             Console.WriteLine(testContract.Number2.Value);
         }
 
-        valuesRepo.Flush();
-        contractSlotsRepo.Flush();
-        objectsRepo.Flush();
+        gameServices.Dispose();
 
         Console.ReadKey(true);
     }
@@ -250,7 +289,7 @@ public class TypeAwareConverter : JsonConverter
             var objType = kvp.Value.GetType();
             writer.WriteStartObject();
             writer.WritePropertyName("Type");
-            writer.WriteValue(objType.FullName);
+            serializer.Serialize(writer, objType);
             writer.WritePropertyName("Value");
             serializer.Serialize(writer, kvp.Value);
             writer.WriteEndObject();
@@ -268,15 +307,74 @@ public class TypeAwareConverter : JsonConverter
             var key = int.Parse(property.Name);
             var valueObject = (JObject)property.Value;
 
-            var typeName = valueObject["Type"].ToString();
-            var valueType = Type.GetType(typeName);
-            Console.WriteLine(valueType);
+            var valueType = valueObject["Type"]!.ToObject<Type>();
 
-            var value = valueObject["Value"].ToObject(valueType, serializer);
+            var value = valueObject["Value"]!.ToObject(valueType, serializer)!;
 
             result[key] = value;
         }
 
         return result;
+    }
+}
+public class SimpleTypeDictionaryConverter : JsonConverter
+{
+    public override bool CanConvert(Type objectType)
+    {
+        return objectType.IsAssignableTo(typeof(IDictionary))
+            && objectType.GenericTypeArguments[0] == typeof(Type);
+    }
+    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+    {
+        var dictionary = (IDictionary)value;
+
+        writer.WriteStartObject();
+        foreach (DictionaryEntry entry in dictionary)
+        {
+            writer.WritePropertyName("Key");
+            serializer.Serialize(writer, entry.Key);
+            writer.WritePropertyName("Value");
+            serializer.Serialize(writer, entry.Value);
+        }
+        writer.WriteEndObject();
+    }
+    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+    {
+        var valueType = objectType.GenericTypeArguments[1];
+        var dictionary = (Activator.CreateInstance(objectType) as IDictionary)!;
+
+        if (reader.TokenType != JsonToken.StartObject) return dictionary;
+
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonToken.EndObject) break;
+            if (reader.TokenType == JsonToken.PropertyName)
+            {
+                reader.Skip();
+                var key = serializer.Deserialize<Type>(reader)!;
+                reader.Read();
+                reader.Skip();
+                var value = serializer.Deserialize(reader, valueType)!;
+
+                dictionary[key] = value;
+            }
+        }
+
+        return dictionary;
+    }
+}
+public class SimpleTypeConverter : JsonConverter
+{
+    public override bool CanConvert(Type objectType)
+    {
+        return objectType.IsAssignableTo(typeof(Type));
+    }
+    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+    {
+        writer.WriteValue(((Type)value).FullName);
+    }
+    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+    {
+        return Type.GetType((string)reader.Value!)!;
     }
 }
