@@ -20,6 +20,7 @@ public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContrac
     private readonly IServiceProvider _services;
     private readonly IContractResolverNode _storageResolver;
     private readonly IGenerator<TValueId> _valueIdGenerator;
+
     public ValueResolverFromStorage(IServiceProvider services, IContractResolverNode storageResolver, IGenerator<TValueId> valueIdGenerator)
     {
         _services = services;
@@ -48,14 +49,16 @@ public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContrac
         if (contracts.TryGet(contractId, out var contractValue) is false)
             contractValue = contracts[contractId] = new ContractValue<TSlotId, TValueId>();
 
-        if (contractValue.Slots.TryGetValue(slotId, out var valueId) is false)
+        if (contractValue.TryGetValue(slotId, out var valueId) is false)
         {
             valueId = _valueIdGenerator.Generate();
-            contractValue.Slots[slotId] = valueId;
+            contractValue[slotId] = valueId;
         }
 
         var valueType = context.Contract.Type.GenericTypeArguments[0];
-        context.Result = CreateExternalValue(valueType, valueId, valuesStorage);
+        var valueFactory = CreateValueFactory(valueType);
+
+        context.Result = valueFactory.Create(valueId, valuesStorage);
 
         return true;
     }
@@ -80,15 +83,26 @@ public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContrac
         storage = (storageResolverContext.Result as IReadWrite<TValueId, object>)!;
         return true;
     }
-    private object CreateExternalValue(Type valueType, TValueId valueId, IReadWrite<TValueId, object> storage)
+    private IValueFactory CreateValueFactory(Type valueType)
     {
-        storage[valueId] = Activator.CreateInstance(valueType)!;
+        var factoryType = typeof(ExternalValueFactory<>).MakeGenericType(typeof(TContractId), typeof(TSlotId), typeof(TValueId), valueType)!;
+        return (Activator.CreateInstance(factoryType) as IValueFactory)!;
+    }
 
-        var idType = typeof(TValueId);
-        var readWriteTypeCastedType = typeof(CastedReadWrite<,>).MakeGenericType(idType, valueType);
-        var externalValueType = typeof(ExternalValue<,>).MakeGenericType(idType, valueType);
 
-        var readWriteTypeCasted = Activator.CreateInstance(readWriteTypeCastedType, storage)!;
-        return Activator.CreateInstance(externalValueType, valueId, readWriteTypeCasted)!;
+    private interface IValueFactory
+    {
+        object Create(TValueId id, IReadWrite<TValueId, object> storage);
+    }
+    private class ExternalValueFactory<TValue> : IValueFactory
+    {
+        public object Create(TValueId id, IReadWrite<TValueId, object> storage)
+        {
+            if (storage.Contains(id) is false)
+                storage[id] = default(TValue)!;
+
+            var castedStorage = new CastedReadWrite<TValueId, TValue>(storage);
+            return new ExternalValue<TValueId, TValue>(id, castedStorage);
+        }
     }
 }

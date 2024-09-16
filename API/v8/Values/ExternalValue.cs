@@ -2,7 +2,7 @@ using GMutagen.v8.IO;
 
 namespace GMutagen.v8.Values;
 
-public class ExternalValue<TId, TValue> : IValue<TValue>
+public class ExternalValue<TId, TValue> : IValue<TValue> where TId : notnull
 {
     private readonly TId _id;
     private readonly IRead<TId, TValue> _reader;

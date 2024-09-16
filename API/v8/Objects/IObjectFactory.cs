@@ -5,7 +5,7 @@ using GMutagen.v8.Contracts;
 
 namespace GMutagen.v8.Objects;
 
-public interface IObjectFactory
+public interface IObjectFactory<out TId>
 {
-    IObject Create(Dictionary<Type, ContractDescriptor> contracts);
+    IObject<TId> Create(Dictionary<Type, ContractDescriptor> contracts);
 }

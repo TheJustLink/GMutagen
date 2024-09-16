@@ -36,10 +36,10 @@ public class ContractResolverFromConstructor<TObjectId, TContractId> : IContract
             objectValue = objects[objectId] = new ObjectValue<TContractId>();
 
         var contractType = context.Contract.Type;
-        if (objectValue.Contracts.TryGetValue(contractType, out var contractId) is false)
+        if (objectValue.TryGetValue(contractType, out var contractId) is false)
         {
             contractId = _contractIdGenerator.Generate();
-            objectValue.Contracts[contractType] = contractId;
+            objectValue[contractType] = contractId;
         }
         context.BuildServices.AddSingleton(new ContractId(typeof(TContractId), contractId));
 

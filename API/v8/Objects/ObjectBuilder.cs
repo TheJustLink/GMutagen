@@ -6,37 +6,37 @@ using GMutagen.v8.Objects.Templates;
 
 namespace GMutagen.v8.Objects;
 
-public class ObjectBuilder
+public class ObjectBuilder<TId>
 {
-    private IObjectFactory _objectFactory;
+    private IObjectFactory<TId> _objectFactory;
     private readonly Dictionary<Type, ContractDescriptor> _contracts = new();
 
-    public ObjectBuilder(IObjectFactory objectFactory, ObjectTemplate template)
+    public ObjectBuilder(IObjectFactory<TId> objectFactory, ObjectTemplate template)
         : this(objectFactory) => Add(template);
-    public ObjectBuilder(IObjectFactory objectFactory)
+    public ObjectBuilder(IObjectFactory<TId> objectFactory)
     {
         _objectFactory = objectFactory;
     }
 
-    public IObject Build()
+    public IObject<TId> Build()
     {
         return _objectFactory.Create(_contracts);
     }
 
-    public ObjectBuilder SetObjectFactory(IObjectFactory objectFactory)
+    public ObjectBuilder<TId> SetObjectFactory(IObjectFactory<TId> objectFactory)
     {
         _objectFactory = objectFactory;
         return this;
     }
 
-    public ObjectBuilder Add(ObjectTemplate template)
+    public ObjectBuilder<TId> Add(ObjectTemplate template)
     {
         foreach (var contract in template.Contracts)
             _contracts.Add(contract.Type, contract);
 
         return this;
     }
-    public ObjectBuilder OverrideWith(ObjectTemplate template)
+    public ObjectBuilder<TId> OverrideWith(ObjectTemplate template)
     {
         foreach (var contract in template.Contracts)
             _contracts[contract.Type] = contract;
@@ -44,16 +44,16 @@ public class ObjectBuilder
         return this;
     }
 
-    public ObjectBuilder Set<TContract, TImplementation>() where TContract : class
+    public ObjectBuilder<TId> Set<TContract, TImplementation>() where TContract : class
     {
         return Set(ContractDescriptor.Create<TContract, TImplementation>());
     }
-    public ObjectBuilder Set<TContract>(TContract implementation) where TContract : class
+    public ObjectBuilder<TId> Set<TContract>(TContract implementation) where TContract : class
     {
         return Set(ContractDescriptor.Create<TContract>(implementation));
     }
 
-    private ObjectBuilder Set(ContractDescriptor contract)
+    private ObjectBuilder<TId> Set(ContractDescriptor contract)
     {
         if (_contracts.ContainsKey(contract.Type) is false)
             throw new ArgumentOutOfRangeException(nameof(contract.Type));

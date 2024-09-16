@@ -20,6 +20,6 @@ public class ContractDescriptor
     public static ContractDescriptor Create<TContract>() => new(typeof(TContract));
     public static ContractDescriptor Create<TContract, TImplementation>() =>
         new(typeof(TContract), typeof(TImplementation));
-    public static ContractDescriptor Create<TContract>(object implementation) =>
-        new(typeof(TContract), implementation.GetType(), implementation);
+    public static ContractDescriptor Create<TContract>(object? implementation) =>
+        new(typeof(TContract), implementation?.GetType(), implementation);
 }

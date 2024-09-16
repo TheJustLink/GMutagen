@@ -3,14 +3,15 @@ using System.Collections.Generic;
 
 namespace GMutagen.v8.Objects;
 
-public class Object<TId> : IObject
+public class Object<TId> : IObject<TId>
 {
-    private readonly TId _id;
+    public TId Id { get; }
+
     private readonly Dictionary<Type, object> _contracts;
 
     public Object(TId id, Dictionary<Type, object> contracts)
     {
-        _id = id;
+        Id = id;
         _contracts = contracts;
     }
 

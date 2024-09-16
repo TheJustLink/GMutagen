@@ -19,6 +19,7 @@ using GMutagen.v8.Objects;
 using GMutagen.v8.Objects.Templates;
 using GMutagen.v8.Contracts;
 using GMutagen.v8.IO.Sources.Dictionary;
+using System.Linq;
 
 namespace Roguelike;
 
@@ -103,10 +104,12 @@ public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>, IDisposable
             settings.Converters.Add(new TypeAwareConverter());
             settings.Converters.Add(new SimpleTypeDictionaryConverter());
 
+            Console.WriteLine($"Loading save {typeof(TId).Name}:{typeof(TValue).Name}");
             _lines = JsonConvert.DeserializeObject<Dictionary<TId, TValue>>(reader.ReadToEnd(), settings) ?? new();
-
+            
             foreach (var line in _lines)
                 _source.Write(line.Key, line.Value);
+            Console.WriteLine($"Save {typeof(TId).Name}:{typeof(TValue).Name} loaded");
         }
         else
         {
@@ -120,30 +123,17 @@ public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>, IDisposable
         get => Read(id);
         set => Write(id, value);
     }
-
     public void Write(TId id, TValue value)
     {
         _lines[id] = value;
         _source.Write(id, value);
     }
-    public TValue Read(TId id)
-    {
-        var value = _source.Read(id);
-        Console.WriteLine($"FileRead [{id}] => [{_lines[id]}]");
-
-        return value;
-    }
-    public bool Contains(TId id)
-    {
-        var value = _source.Contains(id);
-        Console.WriteLine($"FileContains [{id}] => [{_lines.ContainsKey(id)}]");
-
-        return value;
-    }
+    public TValue Read(TId id) => _source.Read(id);
+    public bool Contains(TId id) => _source.Contains(id);
 
     public void Dispose()
     {
-        Console.WriteLine("Dispose save " + this);
+        Console.WriteLine($"Dispose save {typeof(TId).Name}:{typeof(TValue).Name}");
 
         var settings = new JsonSerializerSettings();
         settings.TypeNameHandling = TypeNameHandling.None;
@@ -237,30 +227,71 @@ static class Program
             .Add<ITestContract, TestContract>()
             .Build();
 
-        var snakeBuilder = new ObjectBuilder(objectFactory, snakeTemplate);
+        var snakeBuilder = new ObjectBuilder<int>(objectFactory, snakeTemplate);
+
+        Console.WriteLine("Snakes with god snake:");
+
+        var godSnake = snakeBuilder.Build();
+        var godContract = godSnake.Get<ITestContract>();
+
+        Console.WriteLine("GodObject Id - " + godSnake.Id);
+        Console.WriteLine("GodBefore");
+        Console.WriteLine(godContract.Number1.Value);
+        Console.WriteLine(godContract.Number2.Value);
+
+        godContract.Number1.Value += 1;
+        godContract.Number2.Value += 2;
+
+        Console.WriteLine("GodAfter");
+        Console.WriteLine(godContract.Number1.Value);
+        Console.WriteLine(godContract.Number2.Value);
+        Console.WriteLine();
+
+        snakeBuilder.Set(godContract);
         for (var i = 0; i < 3; i++)
         {
             var snake = snakeBuilder.Build();
-
             var testContract = snake.Get<ITestContract>();
 
-            Console.WriteLine("");
-            Console.WriteLine(snake);
-            Console.WriteLine(testContract);
-
-            Console.WriteLine("");
+            Console.WriteLine("Object Id - " + snake.Id);
             Console.WriteLine("Before");
             Console.WriteLine(testContract.Number1.Value);
             Console.WriteLine(testContract.Number2.Value);
 
+            godContract.Number1.Value += 1;
+            godContract.Number2.Value += 2;
+
+            Console.WriteLine("After");
+            Console.WriteLine(testContract.Number1.Value);
+            Console.WriteLine(testContract.Number2.Value);
+            Console.WriteLine();
+        }
+
+        Console.WriteLine("GodAfter this snakes");
+        Console.WriteLine(godContract.Number1.Value);
+        Console.WriteLine(godContract.Number2.Value);
+        Console.WriteLine();
+
+        snakeBuilder.Set<ITestContract, TestContract>();
+
+        Console.WriteLine("Simple snakes:");
+        for (var i = 0; i < 3; i++)
+        {
+            var snake = snakeBuilder.Build();
+            var testContract = snake.Get<ITestContract>();
+
+            Console.WriteLine("Object Id - " + snake.Id);
+            Console.WriteLine("Before");
+            Console.WriteLine(testContract.Number1.Value);
+            Console.WriteLine(testContract.Number2.Value);
 
             testContract.Number1.Value += i;
             testContract.Number2.Value += i * 2;
 
-            Console.WriteLine("");
             Console.WriteLine("After");
             Console.WriteLine(testContract.Number1.Value);
             Console.WriteLine(testContract.Number2.Value);
+            Console.WriteLine();
         }
 
         gameServices.Dispose();
@@ -273,57 +304,11 @@ public class TypeAwareConverter : JsonConverter
 {
     public override bool CanConvert(Type objectType)
     {
-        return objectType.IsAssignableTo(typeof(IDictionary))
-            && objectType.GenericTypeArguments[1] == typeof(object);
+        return objectType.GetInterfaces().Any(i => i.IsGenericType
+            && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)
+            && i.GenericTypeArguments[1] == typeof(object));
     }
 
-    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-    {
-        var dictionary = (Dictionary<int, object>)value;
-
-        writer.WriteStartObject();
-        foreach (var kvp in dictionary)
-        {
-            writer.WritePropertyName(kvp.Key.ToString());
-
-            var objType = kvp.Value.GetType();
-            writer.WriteStartObject();
-            writer.WritePropertyName("Type");
-            serializer.Serialize(writer, objType);
-            writer.WritePropertyName("Value");
-            serializer.Serialize(writer, kvp.Value);
-            writer.WriteEndObject();
-        }
-        writer.WriteEndObject();
-    }
-
-    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-    {
-        var result = new Dictionary<int, object>();
-
-        var obj = JObject.Load(reader);
-        foreach (var property in obj.Properties())
-        {
-            var key = int.Parse(property.Name);
-            var valueObject = (JObject)property.Value;
-
-            var valueType = valueObject["Type"]!.ToObject<Type>();
-
-            var value = valueObject["Value"]!.ToObject(valueType, serializer)!;
-
-            result[key] = value;
-        }
-
-        return result;
-    }
-}
-public class SimpleTypeDictionaryConverter : JsonConverter
-{
-    public override bool CanConvert(Type objectType)
-    {
-        return objectType.IsAssignableTo(typeof(IDictionary))
-            && objectType.GenericTypeArguments[0] == typeof(Type);
-    }
     public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
     {
         var dictionary = (IDictionary)value;
@@ -331,16 +316,18 @@ public class SimpleTypeDictionaryConverter : JsonConverter
         writer.WriteStartObject();
         foreach (DictionaryEntry entry in dictionary)
         {
-            writer.WritePropertyName("Key");
-            serializer.Serialize(writer, entry.Key);
-            writer.WritePropertyName("Value");
+            writer.WritePropertyName(entry.Key.ToString()!);
+            writer.WriteStartObject();
+            writer.WritePropertyName(entry.Value!.GetType().FullName!);
             serializer.Serialize(writer, entry.Value);
+            writer.WriteEndObject();
         }
         writer.WriteEndObject();
     }
+
     public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
     {
-        var valueType = objectType.GenericTypeArguments[1];
+        var keyType = objectType.GenericTypeArguments[0];
         var dictionary = (Activator.CreateInstance(objectType) as IDictionary)!;
 
         if (reader.TokenType != JsonToken.StartObject) return dictionary;
@@ -350,10 +337,60 @@ public class SimpleTypeDictionaryConverter : JsonConverter
             if (reader.TokenType == JsonToken.EndObject) break;
             if (reader.TokenType == JsonToken.PropertyName)
             {
-                reader.Skip();
-                var key = serializer.Deserialize<Type>(reader)!;
+                var key = Convert.ChangeType(reader.Value!, keyType);
                 reader.Read();
-                reader.Skip();
+                
+                reader.Read();
+                var typeFullName = (reader.Value as string)!;
+                var valueType = Type.GetType(typeFullName)!;
+                
+                reader.Read();
+                var value = serializer.Deserialize(reader, valueType)!;
+
+                reader.Read();
+                dictionary[key] = value;
+            }
+        }
+
+        return dictionary;
+    }
+}
+public class SimpleTypeDictionaryConverter : JsonConverter
+{
+    public override bool CanConvert(Type objectType)
+    {
+        return objectType.GetInterfaces().Any(i => i.IsGenericType
+            && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)
+            && i.GenericTypeArguments[0] == typeof(Type));
+    }
+    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+    {
+        var dictionary = (IDictionary)value;
+
+        writer.WriteStartObject();
+        foreach (DictionaryEntry entry in dictionary)
+        {
+            writer.WritePropertyName((entry.Key as Type)!.FullName!);
+            serializer.Serialize(writer, entry.Value);
+        }
+        writer.WriteEndObject();
+    }
+    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+    {
+        var valueType = objectType.GetInterfaces().First(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)).GenericTypeArguments[1];
+        var dictionary = (Activator.CreateInstance(objectType) as IDictionary)!;
+
+        if (reader.TokenType != JsonToken.StartObject) return dictionary;
+
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonToken.EndObject) break;
+            if (reader.TokenType == JsonToken.PropertyName)
+            {
+                var typeFullName = (reader.Value as string)!;
+                var key = Type.GetType(typeFullName)!;
+
+                reader.Read();
                 var value = serializer.Deserialize(reader, valueType)!;
 
                 dictionary[key] = value;

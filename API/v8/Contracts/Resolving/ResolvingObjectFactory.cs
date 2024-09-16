@@ -11,7 +11,7 @@ using GMutagen.v8.Objects;
 
 namespace GMutagen.v8.Contracts.Resolving;
 
-public class ResolvingObjectFactory<TId> : IObjectFactory where TId : notnull
+public class ResolvingObjectFactory<TId> : IObjectFactory<TId> where TId : notnull
 {
     private readonly IGenerator<TId> _idGenerator;
     private readonly IContractResolverNode _contractResolverNode;
@@ -22,13 +22,12 @@ public class ResolvingObjectFactory<TId> : IObjectFactory where TId : notnull
         _contractResolverNode = contractResolverNode;
     }
 
-    public IObject Create(Dictionary<Type, ContractDescriptor> contracts)
+    public IObject<TId> Create(Dictionary<Type, ContractDescriptor> contracts)
     {
         var id = _idGenerator.Generate();
         var buildServices = new ServiceCollection()
             .AddSingleton(new ObjectId(typeof(TId), id));
 
-        Console.WriteLine("CREATING OBJECT " + id);
         var implementations = new Dictionary<Type, object>(contracts.Count);
 
         foreach (var contract in contracts.Values)
