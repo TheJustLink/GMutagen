@@ -1,50 +1,61 @@
 using System;
 using System.Linq;
 using System.Reflection;
-using GMutagen.v8.Contracts.Resolving.BuildServices;
+
 using GMutagen.v8.Extensions;
 using GMutagen.v8.Generators;
-using GMutagen.v8.IO;
 using GMutagen.v8.Objects;
 
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GMutagen.v8.Contracts.Resolving.Nodes;
 
-public class ContractResolverFromConstructor<TObjectId, TContractId> : IContractResolverNode where TObjectId : notnull
+public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : IContractResolverNode
+    where TContractId : notnull where TSlotId : notnull
 {
     private readonly IServiceProvider _services;
     private readonly IContractResolverNode _parameterResolver;
     private readonly IGenerator<TContractId> _contractIdGenerator;
     public ContractResolverFromConstructor(IServiceProvider services, IContractResolverNode parameterResolver, IGenerator<TContractId> contractIdGenerator)
     {
-        _parameterResolver = parameterResolver;
         _services = services;
+        _parameterResolver = parameterResolver;
         _contractIdGenerator = contractIdGenerator;
     }
 
     public bool Resolve(ContractResolverContext context)
     {
-        var buildServices = context.Services;
-        var objectIdDescriptor = buildServices.GetRequiredService<ObjectId>();
-
-        if (objectIdDescriptor.Value is not TObjectId objectId)
-            return false;
-
-        var objects = _services.GetRequiredService<IReadWrite<TObjectId, ObjectValue<TContractId>>>();
-        if (objects.TryGet(objectId, out var objectValue) is false)
-            objectValue = objects[objectId] = new ObjectValue<TContractId>();
+        var contextServiceProvider = context.BuildServiceProvider();
+        
+        var objectValue = contextServiceProvider.GetService<ObjectValue<TContractId>>();
+        if (objectValue is null) return false;
 
         var contractType = context.Contract.Type;
+        var contractValue = GetContractValue(objectValue, contractType);
+        context.Services.AddSingleton(contractValue);
+
+        var constructors = contractType.GetConstructors();
+        return constructors.Any(constructor => ResolveConstructor(context, constructor));
+    }
+    private ContractValue<TSlotId, TValueId> GetContractValue(ObjectValue<TContractId> objectValue, Type contractType)
+    {
+        var contractId = GetContractId(objectValue, contractType);
+
+        var contracts = _services.GetContractValues<TContractId, TSlotId, TValueId>();
+        if (contracts.TryGet(contractId, out var contractValue) is false)
+            contractValue = contracts[contractId] = new();
+
+        return contractValue;
+    }
+    private TContractId GetContractId(ObjectValue<TContractId> objectValue, Type contractType)
+    {
         if (objectValue.TryGetValue(contractType, out var contractId) is false)
         {
             contractId = _contractIdGenerator.Generate();
             objectValue[contractType] = contractId;
         }
-        context.BuildServices.AddSingleton(new ContractId(typeof(TContractId), contractId));
 
-        var constructors = contractType.GetConstructors();
-        return constructors.Any(constructor => ResolveConstructor(context, constructor));
+        return contractId;
     }
 
     private bool ResolveConstructor(ContractResolverContext context, ConstructorInfo constructor)
@@ -55,7 +66,7 @@ public class ContractResolverFromConstructor<TObjectId, TContractId> : IContract
         for (var i = 0; i < parameters.Length; i++)
         {
             var parameterInfo = parameters[i];
-            context.BuildServices.AddSingleton(new SlotId(i.GetType(), i));
+            context.Key = i;
 
             if (ResolveParameter(context, parameterInfo, out var parameter) is false)
                 return false;
@@ -71,8 +82,11 @@ public class ContractResolverFromConstructor<TObjectId, TContractId> : IContract
         parameter = default;
 
         var parameterContract = new ContractDescriptor(parameterInfo.ParameterType);
-        var parameterContext = new ContractResolverContext(parameterContract, context.BuildServices);
-        parameterContext.Attributes = parameterInfo.CustomAttributes.ToArray();
+        var parameterContext = new ContractResolverContext(parameterContract, context.Services)
+        {
+            Key = context.Key,
+            Attributes = parameterInfo.CustomAttributes.ToArray()
+        };
 
         if (_parameterResolver.Resolve(parameterContext) is false || parameterContext.Result is null)
             return false;

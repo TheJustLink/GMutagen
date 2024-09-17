@@ -2,38 +2,44 @@ using System;
 using System.Collections.Generic;
 
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
-using GMutagen.v8.Contracts.Resolving.BuildServices;
 using GMutagen.v8.Contracts.Resolving.Nodes;
+using GMutagen.v8.Extensions;
 using GMutagen.v8.Generators;
 using GMutagen.v8.Objects;
 
 namespace GMutagen.v8.Contracts.Resolving;
 
-public class ResolvingObjectFactory<TId> : IObjectFactory<TId> where TId : notnull
+public class ResolvingObjectFactory<TObjectId, TContractId> : IObjectFactory<TObjectId> where TObjectId : notnull
 {
-    private readonly IGenerator<TId> _idGenerator;
+    private readonly IServiceProvider _services;
+    private readonly IGenerator<TObjectId> _idGenerator;
     private readonly IContractResolverNode _contractResolverNode;
 
-    public ResolvingObjectFactory(IGenerator<TId> idGenerator, IContractResolverNode contractResolverNode)
+    public ResolvingObjectFactory(IServiceProvider services, IGenerator<TObjectId> idGenerator, IContractResolverNode contractResolverNode)
     {
+        _services = services;
         _idGenerator = idGenerator;
         _contractResolverNode = contractResolverNode;
     }
 
-    public IObject<TId> Create(Dictionary<Type, ContractDescriptor> contracts)
+    public IObject<TObjectId> Create(Dictionary<Type, ContractDescriptor> contracts)
     {
-        var id = _idGenerator.Generate();
+        var objectId = _idGenerator.Generate();
+        var objects = _services.GetObjectValues<TObjectId, TContractId>();
+
+        if (objects.TryGet(objectId, out var objectValue) is false)
+            objectValue = objects[objectId] = new();
+
         var buildServices = new ServiceCollection()
-            .AddSingleton(new ObjectId(typeof(TId), id));
+            .AddSingleton(objectValue);
 
         var implementations = new Dictionary<Type, object>(contracts.Count);
 
         foreach (var contract in contracts.Values)
             implementations[contract.Type] = Resolve(contract, buildServices);
 
-        return new Object<TId>(id, implementations);
+        return new Object<TObjectId>(objectId, implementations);
     }
 
     private object Resolve(ContractDescriptor contract, IServiceCollection buildServices)

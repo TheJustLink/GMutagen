@@ -1,14 +1,9 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using GMutagen.v8.IO;
 using GMutagen.v8.Values;
 
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using GMutagen.v8.Generators;
@@ -19,15 +14,22 @@ using GMutagen.v8.Objects;
 using GMutagen.v8.Objects.Templates;
 using GMutagen.v8.Contracts;
 using GMutagen.v8.IO.Sources.Dictionary;
-using System.Linq;
 
 namespace Roguelike;
 
-public class InLoggerAttribute : ValueLocationAttribute { }
 public interface ITestContract
 {
     IValue<int> Number1 { get; set; }
     IValue<int> Number2 { get; set; }
+}
+public interface INameContract
+{
+    IValue<string> Name { get; set; }
+}
+public class DefaultNameContract : INameContract
+{
+    public IValue<string> Name { get; set; }
+    public DefaultNameContract(IValue<string> name) => Name = name;
 }
 public class TestContract : ITestContract
 {
@@ -38,148 +40,6 @@ public class TestContract : ITestContract
     {
         Number1 = number1;
         Number2 = number2;
-    }
-}
-public class LoggerRepository<TId, TValue> : IReadWrite<TId, TValue> where TId : notnull
-{
-    private readonly IReadWrite<TId, TValue> _source;
-
-    public TValue this[TId id]
-    {
-        get => Read(id);
-        set => Write(id, value);
-    }
-
-    public LoggerRepository(IReadWrite<TId, TValue> source)
-    {
-        _source = source;
-    }
-
-    public void Write(TId id, TValue value)
-    {
-        Console.WriteLine($"Write [{id}] <= [{value}]");
-        _source.Write(id, value);
-    }
-    public TValue Read(TId id)
-    {
-        var value = _source.Read(id);
-        Console.WriteLine($"Read [{id}] => [{value}]");
-
-        return value;
-    }
-    public bool Contains(TId id)
-    {
-        var value = _source.Contains(id);
-        Console.WriteLine($"Contains [{id}] => [{value}]");
-
-        return value;
-    }
-
-    public static LoggerRepository<TId, TValue> Create(IReadWrite<TId, TValue> source)
-    {
-        return new LoggerRepository<TId, TValue>(source);
-    }
-}
-public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>, IDisposable
-    where TId : notnull
-{
-    private readonly IReadWrite<TId, TValue> _source;
-    private readonly FileStream _stream;
-    private readonly Dictionary<TId, TValue> _lines;
-
-    public FileRepository(IReadWrite<TId, TValue> source, string filepath)
-    {
-        _source = source;
-
-        if (File.Exists(filepath))
-        {
-            _stream = File.Open(filepath, FileMode.OpenOrCreate);
-            var reader = new StreamReader(_stream);
-
-            var settings = new JsonSerializerSettings();
-            settings.MetadataPropertyHandling = MetadataPropertyHandling.Ignore;
-            settings.TypeNameHandling = TypeNameHandling.None;
-            settings.TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple;
-            settings.Converters.Add(new SimpleTypeConverter());
-            settings.Converters.Add(new TypeAwareConverter());
-            settings.Converters.Add(new SimpleTypeDictionaryConverter());
-
-            Console.WriteLine($"Loading save {typeof(TId).Name}:{typeof(TValue).Name}");
-            _lines = JsonConvert.DeserializeObject<Dictionary<TId, TValue>>(reader.ReadToEnd(), settings) ?? new();
-            
-            foreach (var line in _lines)
-                _source.Write(line.Key, line.Value);
-            Console.WriteLine($"Save {typeof(TId).Name}:{typeof(TValue).Name} loaded");
-        }
-        else
-        {
-            _stream = File.Open(filepath, FileMode.OpenOrCreate);
-            _lines = new();
-        }
-    }
-
-    public TValue this[TId id]
-    {
-        get => Read(id);
-        set => Write(id, value);
-    }
-    public void Write(TId id, TValue value)
-    {
-        _lines[id] = value;
-        _source.Write(id, value);
-    }
-    public TValue Read(TId id) => _source.Read(id);
-    public bool Contains(TId id) => _source.Contains(id);
-
-    public void Dispose()
-    {
-        Console.WriteLine($"Dispose save {typeof(TId).Name}:{typeof(TValue).Name}");
-
-        var settings = new JsonSerializerSettings();
-        settings.TypeNameHandling = TypeNameHandling.None;
-        settings.TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple;
-        settings.Converters.Add(new SimpleTypeConverter());
-        settings.Converters.Add(new TypeAwareConverter());
-        settings.Converters.Add(new SimpleTypeDictionaryConverter());
-
-        var json = JsonConvert.SerializeObject(_lines, settings);
-        _stream.Position = 0;
-        var writer = new StreamWriter(_stream);
-        writer.Write(json);
-        writer.Flush();
-
-        // using (var bsonWriter = new BsonWriter(_stream))
-        // {
-        //     var serializer = new JsonSerializer();
-        //     serializer.Converters.Add(new TypeAwareConverter());
-        //     serializer.Serialize(bsonWriter, _lines);
-        // }
-
-        _stream.Flush();
-        _stream.Close();
-    }
-}
-public class FileReadWriteFactory : IReadWriteFactory
-{
-    private readonly IReadWriteFactory _sourceStorageFactory;
-    private readonly string _defaultFilePath;
-    public FileReadWriteFactory(IReadWriteFactory sourceStorageFactory, string defaultFilePath)
-    {
-        _sourceStorageFactory = sourceStorageFactory;
-        _defaultFilePath = defaultFilePath;
-    }
-
-    public IReadWrite<TId, TValue> CreateReadWrite<TId, TValue>() where TId : notnull
-    {
-        var source = _sourceStorageFactory.CreateReadWrite<TId, TValue>();
-
-        return new FileRepository<TId, TValue>(source, _defaultFilePath);
-    }
-    public IReadWrite<TId, TValue> Create<TId, TValue>(string filePath) where TId : notnull
-    {
-        var source = _sourceStorageFactory.CreateReadWrite<TId, TValue>();
-
-        return new FileRepository<TId, TValue>(source, filePath);
     }
 }
 
@@ -217,13 +77,14 @@ static class Program
         var compositeResolver = new CompositeContractResolverNode();
         compositeResolver.Add(new ContractResolverFromDescriptor(compositeResolver))
             .Add(new ContractResolverFromContainer(gameServices))
-            .Add(new ValueResolverFromStorage<int, int, int>(gameServices, compositeResolver, new IncrementalGenerator<int>()))
-            .Add(new ContractResolverFromConstructor<int, int>(gameServices, compositeResolver, new IncrementalGenerator<int>()));
+            .Add(new ValueResolverFromStorage<int, int>(compositeResolver, new IncrementalGenerator<int>()))
+            .Add(new ContractResolverFromConstructor<int, int, int>(gameServices, compositeResolver, new IncrementalGenerator<int>()));
 
-        var objectFactory = new ResolvingObjectFactory<int>(new IncrementalGenerator<int>(), compositeResolver);
+        var objectFactory = new ResolvingObjectFactory<int, int>(gameServices, new IncrementalGenerator<int>(), compositeResolver);
 
 
         var snakeTemplate = new ObjectTemplateBuilder()
+            //.Add<INameContract, DefaultNameContract>()
             .Add<ITestContract, TestContract>()
             .Build();
 
@@ -238,9 +99,12 @@ static class Program
         Console.WriteLine("GodBefore");
         Console.WriteLine(godContract.Number1.Value);
         Console.WriteLine(godContract.Number2.Value);
+        // Console.WriteLine(godContract.NameContract.Name);
+
 
         godContract.Number1.Value += 1;
         godContract.Number2.Value += 2;
+        // godContract.NameContract.Name.Value = "Amoga - " + (godContract.Number1.Value + godContract.Number2.Value);
 
         Console.WriteLine("GodAfter");
         Console.WriteLine(godContract.Number1.Value);
@@ -297,121 +161,5 @@ static class Program
         gameServices.Dispose();
 
         Console.ReadKey(true);
-    }
-}
-
-public class TypeAwareConverter : JsonConverter
-{
-    public override bool CanConvert(Type objectType)
-    {
-        return objectType.GetInterfaces().Any(i => i.IsGenericType
-            && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)
-            && i.GenericTypeArguments[1] == typeof(object));
-    }
-
-    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-    {
-        var dictionary = (IDictionary)value;
-
-        writer.WriteStartObject();
-        foreach (DictionaryEntry entry in dictionary)
-        {
-            writer.WritePropertyName(entry.Key.ToString()!);
-            writer.WriteStartObject();
-            writer.WritePropertyName(entry.Value!.GetType().FullName!);
-            serializer.Serialize(writer, entry.Value);
-            writer.WriteEndObject();
-        }
-        writer.WriteEndObject();
-    }
-
-    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-    {
-        var keyType = objectType.GenericTypeArguments[0];
-        var dictionary = (Activator.CreateInstance(objectType) as IDictionary)!;
-
-        if (reader.TokenType != JsonToken.StartObject) return dictionary;
-
-        while (reader.Read())
-        {
-            if (reader.TokenType == JsonToken.EndObject) break;
-            if (reader.TokenType == JsonToken.PropertyName)
-            {
-                var key = Convert.ChangeType(reader.Value!, keyType);
-                reader.Read();
-                
-                reader.Read();
-                var typeFullName = (reader.Value as string)!;
-                var valueType = Type.GetType(typeFullName)!;
-                
-                reader.Read();
-                var value = serializer.Deserialize(reader, valueType)!;
-
-                reader.Read();
-                dictionary[key] = value;
-            }
-        }
-
-        return dictionary;
-    }
-}
-public class SimpleTypeDictionaryConverter : JsonConverter
-{
-    public override bool CanConvert(Type objectType)
-    {
-        return objectType.GetInterfaces().Any(i => i.IsGenericType
-            && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)
-            && i.GenericTypeArguments[0] == typeof(Type));
-    }
-    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-    {
-        var dictionary = (IDictionary)value;
-
-        writer.WriteStartObject();
-        foreach (DictionaryEntry entry in dictionary)
-        {
-            writer.WritePropertyName((entry.Key as Type)!.FullName!);
-            serializer.Serialize(writer, entry.Value);
-        }
-        writer.WriteEndObject();
-    }
-    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-    {
-        var valueType = objectType.GetInterfaces().First(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>)).GenericTypeArguments[1];
-        var dictionary = (Activator.CreateInstance(objectType) as IDictionary)!;
-
-        if (reader.TokenType != JsonToken.StartObject) return dictionary;
-
-        while (reader.Read())
-        {
-            if (reader.TokenType == JsonToken.EndObject) break;
-            if (reader.TokenType == JsonToken.PropertyName)
-            {
-                var typeFullName = (reader.Value as string)!;
-                var key = Type.GetType(typeFullName)!;
-
-                reader.Read();
-                var value = serializer.Deserialize(reader, valueType)!;
-
-                dictionary[key] = value;
-            }
-        }
-
-        return dictionary;
-    }
-}
-public class SimpleTypeConverter : JsonConverter
-{
-    public override bool CanConvert(Type objectType)
-    {
-        return objectType.IsAssignableTo(typeof(Type));
-    }
-    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-    {
-        writer.WriteValue(((Type)value).FullName);
-    }
-    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-    {
-        return Type.GetType((string)reader.Value!)!;
     }
 }

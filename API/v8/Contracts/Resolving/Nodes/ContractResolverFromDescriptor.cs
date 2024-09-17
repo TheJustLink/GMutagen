@@ -18,7 +18,11 @@ public class ContractResolverFromDescriptor : IContractResolverNode
             return false;
 
         var implementationContract = new ContractDescriptor(context.Contract.ImplementationType);
-        var implementationContext = new ContractResolverContext(implementationContract, context.BuildServices);
+        var implementationContext = new ContractResolverContext(implementationContract, context.Services)
+        {
+            Key = context.Key,
+            Attributes = context.Attributes
+        };
 
         if (_implementationTypeResolver.Resolve(implementationContext) is false || implementationContext.Result is null)
             return false;

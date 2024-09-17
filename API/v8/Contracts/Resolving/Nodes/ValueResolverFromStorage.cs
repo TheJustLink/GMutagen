@@ -3,7 +3,6 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 
 using GMutagen.v8.Contracts.Resolving.Attributes;
-using GMutagen.v8.Contracts.Resolving.BuildServices;
 using GMutagen.v8.Extensions;
 using GMutagen.v8.Generators;
 using GMutagen.v8.IO;
@@ -12,53 +11,35 @@ using GMutagen.v8.IO.Casted;
 
 namespace GMutagen.v8.Contracts.Resolving.Nodes;
 
-public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContractResolverNode
-    where TContractId : notnull
-    where TSlotId : notnull
+public class ValueResolverFromStorage<TSlotId, TValueId> : IContractResolverNode where TSlotId : notnull
     where TValueId : notnull
 {
-    private readonly IServiceProvider _services;
     private readonly IContractResolverNode _storageResolver;
     private readonly IGenerator<TValueId> _valueIdGenerator;
-
-    public ValueResolverFromStorage(IServiceProvider services, IContractResolverNode storageResolver, IGenerator<TValueId> valueIdGenerator)
+    public ValueResolverFromStorage(IContractResolverNode storageResolver, IGenerator<TValueId> valueIdGenerator)
     {
-        _services = services;
         _storageResolver = storageResolver;
         _valueIdGenerator = valueIdGenerator;
     }
 
     public bool Resolve(ContractResolverContext context)
     {
-        if (context.Contract.Type.IsAssignableTo(typeof(IValue)) is false)
-            return false;
+        if (context.Contract.Type.IsAssignableTo(typeof(IValue)) is false) return false;
+        if (context.Key is not TSlotId slotId) return false;
 
-        return ResolveStorage(context, out var storage) && Resolve(context, storage!);
+        return ResolveValue(context, slotId);
     }
 
-    private bool Resolve(ContractResolverContext context, IReadWrite<TValueId, object> valuesStorage)
+    private bool ResolveValue(ContractResolverContext context, TSlotId slotId)
     {
-        var buildServices = context.Services;
-        var contractIdDescriptor = buildServices.GetRequiredService<ContractId>();
-        var slotIdDescriptor = buildServices.GetRequiredService<SlotId>();
+        if (ResolveStorage(context, out var storage) is false) return false;
 
-        if (contractIdDescriptor.Value is not TContractId contractId || slotIdDescriptor.Value is not TSlotId slotId)
-            return false;
+        var contextServiceProvider = context.BuildServiceProvider();
+        var contractValue = contextServiceProvider.GetService<ContractValue<TSlotId, TValueId>>();
+        if (contractValue is null) return false;
 
-        var contracts = _services.GetRequiredService<IReadWrite<TContractId, ContractValue<TSlotId, TValueId>>>();
-        if (contracts.TryGet(contractId, out var contractValue) is false)
-            contractValue = contracts[contractId] = new ContractValue<TSlotId, TValueId>();
-
-        if (contractValue.TryGetValue(slotId, out var valueId) is false)
-        {
-            valueId = _valueIdGenerator.Generate();
-            contractValue[slotId] = valueId;
-        }
-
-        var valueType = context.Contract.Type.GenericTypeArguments[0];
-        var valueFactory = CreateValueFactory(valueType);
-
-        context.Result = valueFactory.Create(valueId, valuesStorage);
+        var valueType = GetValueType(context);
+        context.Result = CreateExternalValue(storage!, contractValue, slotId, valueType);
 
         return true;
     }
@@ -66,9 +47,10 @@ public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContrac
     {
         storage = null;
 
+        // TODO: Replace this boilerplate shit to own IServiceProvider wrapper (node resolving under hood)
         var valuesStorageType = typeof(IReadWrite<TValueId, object>);
         var storageContract = new ContractDescriptor(valuesStorageType);
-        var storageResolverContext = new ContractResolverContext(storageContract, context.BuildServices);
+        var storageResolverContext = new ContractResolverContext(storageContract, context.Services);
 
         if (context.Attributes is not null)
         {
@@ -83,9 +65,31 @@ public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContrac
         storage = (storageResolverContext.Result as IReadWrite<TValueId, object>)!;
         return true;
     }
+
+    private Type GetValueType(ContractResolverContext context)
+    {
+        return context.Contract.Type.GenericTypeArguments[0];
+    }
+    private object CreateExternalValue(IReadWrite<TValueId, object> storage, ContractValue<TSlotId, TValueId> contractValue, TSlotId slotId, Type valueType)
+    {
+        var valueId = GetValueId(contractValue, slotId);
+        var valueFactory = CreateValueFactory(valueType);
+
+        return valueFactory.Create(valueId, storage);
+    }
+    private TValueId GetValueId(ContractValue<TSlotId, TValueId> contractValue, TSlotId slotId)
+    {
+        if (contractValue.TryGetValue(slotId, out var valueId) is false)
+        {
+            valueId = _valueIdGenerator.Generate();
+            contractValue[slotId] = valueId;
+        }
+
+        return valueId;
+    }
     private IValueFactory CreateValueFactory(Type valueType)
     {
-        var factoryType = typeof(ExternalValueFactory<>).MakeGenericType(typeof(TContractId), typeof(TSlotId), typeof(TValueId), valueType)!;
+        var factoryType = typeof(ExternalValueFactory<>).MakeGenericType(typeof(TSlotId), typeof(TValueId), valueType)!;
         return (Activator.CreateInstance(factoryType) as IValueFactory)!;
     }
 
@@ -99,7 +103,7 @@ public class ValueResolverFromStorage<TContractId, TSlotId, TValueId> : IContrac
         public object Create(TValueId id, IReadWrite<TValueId, object> storage)
         {
             if (storage.Contains(id) is false)
-                storage[id] = default(TValue)!;
+                storage[id] = default(TValue)!; //TODO: Fix boxing
 
             var castedStorage = new CastedReadWrite<TValueId, TValue>(storage);
             return new ExternalValue<TValueId, TValue>(id, castedStorage);

@@ -7,7 +7,7 @@ namespace GMutagen.v8.Contracts.Resolving.Nodes;
 public class ContractResolverContext
 {
     public readonly ContractDescriptor Contract;
-    public readonly IServiceCollection BuildServices;
+    public readonly IServiceCollection Services;
 
     public object? Key;
     public object? Result;
@@ -17,8 +17,8 @@ public class ContractResolverContext
     public ContractResolverContext(ContractDescriptor contract, IServiceCollection services)
     {
         Contract = contract;
-        BuildServices = services;
+        Services = services;
     }
 
-    public IServiceProvider Services => BuildServices.BuildServiceProvider();
+    public IServiceProvider BuildServiceProvider() => Services.BuildServiceProvider();
 }
