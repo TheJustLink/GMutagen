@@ -1,7 +1,5 @@
 using System;
 
-using Microsoft.Extensions.DependencyInjection;
-
 using GMutagen.v8.Contracts.Resolving.Attributes;
 using GMutagen.v8.Extensions;
 using GMutagen.v8.Generators;
@@ -34,9 +32,8 @@ public class ValueResolverFromStorage<TSlotId, TValueId> : IContractResolverNode
     {
         if (ResolveStorage(context, out var storage) is false) return false;
 
-        var contextServiceProvider = context.BuildServiceProvider();
-        var contractValue = contextServiceProvider.GetService<ContractValue<TSlotId, TValueId>>();
-        if (contractValue is null) return false;
+        var hasContract = context.Services.TryGet<ContractValue<TSlotId, TValueId>>(out var contractValue);
+        if (hasContract is false) return false;
 
         var valueType = GetValueType(context);
         context.Result = CreateExternalValue(storage!, contractValue, slotId, valueType);

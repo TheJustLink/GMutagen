@@ -6,8 +6,6 @@ using GMutagen.v8.Extensions;
 using GMutagen.v8.Generators;
 using GMutagen.v8.Objects;
 
-using Microsoft.Extensions.DependencyInjection;
-
 namespace GMutagen.v8.Contracts.Resolving.Nodes;
 
 public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : IContractResolverNode
@@ -25,28 +23,16 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
 
     public bool Resolve(ContractResolverContext context)
     {
-        var contextServiceProvider = context.BuildServiceProvider();
-        
-        var objectValue = contextServiceProvider.GetService<ObjectValue<TContractId>>();
-        if (objectValue is null) return false;
+        var hasObject = context.Services.TryGet<ObjectValue<TContractId>>(out var objectValue);
+        if (hasObject is false) return false;
 
         var contractType = context.Contract.Type;
-        var contractValue = GetContractValue(objectValue, contractType);
-        context.Services.AddSingleton(contractValue);
-
-        var constructors = contractType.GetConstructors();
-        return constructors.Any(constructor => ResolveConstructor(context, constructor));
-    }
-    private ContractValue<TSlotId, TValueId> GetContractValue(ObjectValue<TContractId> objectValue, Type contractType)
-    {
         var contractId = GetContractId(objectValue, contractType);
 
-        var contracts = _services.GetContractValues<TContractId, TSlotId, TValueId>();
-        if (contracts.TryGet(contractId, out var contractValue) is false)
-            contractValue = contracts[contractId] = new();
-
-        return contractValue;
+        return ResolveFromCache(context, contractId)
+            || ResolveFromInstantiation(context, contractId, contractType);
     }
+    
     private TContractId GetContractId(ObjectValue<TContractId> objectValue, Type contractType)
     {
         if (objectValue.TryGetValue(contractType, out var contractId) is false)
@@ -56,6 +42,36 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
         }
 
         return contractId;
+    }
+
+    private bool ResolveFromCache(ContractResolverContext context, TContractId contractId)
+    {
+        var cache = context.Services.Get<ContractRuntimeCache<TContractId>>()!;
+        if (cache.TryGetById(contractId, out var implementation) is false)
+            return false;
+
+        context.Result = implementation;
+        return true;
+    }
+    private bool ResolveFromInstantiation(ContractResolverContext context, TContractId contractId, Type contractType)
+    {
+        var contractValue = GetContractValue(contractId);
+        context.Services.Set(contractValue);
+
+        var constructors = contractType.GetConstructors();
+        var isResolved = constructors.Any(constructor => ResolveConstructor(context, constructor));
+
+        if (isResolved) PutToCache(context.Services, contractId, context.Result!);
+
+        return isResolved;
+    }
+    private ContractValue<TSlotId, TValueId> GetContractValue(TContractId contractId)
+    {
+        var contracts = _services.GetContractValues<TContractId, TSlotId, TValueId>();
+        if (contracts.TryGet(contractId, out var contractValue) is false)
+            contractValue = contracts[contractId] = new();
+
+        return contractValue;
     }
 
     private bool ResolveConstructor(ContractResolverContext context, ConstructorInfo constructor)
@@ -94,5 +110,10 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
         parameter = parameterContext.Result;
 
         return true;
+    }
+    private void PutToCache(ContextServices services, TContractId id, object implementation)
+    {
+        var cache = services.Get<ContractRuntimeCache<TContractId>>()!;
+        cache.Add(id, implementation);
     }
 }

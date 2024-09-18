@@ -74,13 +74,17 @@ static class Program
 
         using var gameServices = gameConfig.BuildServiceProvider();
 
-        var compositeResolver = new CompositeContractResolverNode();
-        compositeResolver.Add(new ContractResolverFromDescriptor(compositeResolver))
-            .Add(new ContractResolverFromContainer(gameServices))
-            .Add(new ValueResolverFromStorage<int, int>(compositeResolver, new IncrementalGenerator<int>()))
-            .Add(new ContractResolverFromConstructor<int, int, int>(gameServices, compositeResolver, new IncrementalGenerator<int>()));
+        var valueIdGenerator = new IncrementalGenerator<int>();
+        var contractIdGenerator = new IncrementalGenerator<int>();
+        var objectIdGenerator = new IncrementalGenerator<int>();
 
-        var objectFactory = new ResolvingObjectFactory<int, int>(gameServices, new IncrementalGenerator<int>(), compositeResolver);
+        var compositeResolver = new CompositeContractResolverNode();
+        compositeResolver.Add(new ContractResolverFromDescriptor<int>(compositeResolver, contractIdGenerator))
+            .Add(new ContractResolverFromContainer(gameServices))
+            .Add(new ValueResolverFromStorage<int, int>(compositeResolver, valueIdGenerator))
+            .Add(new ContractResolverFromConstructor<int, int, int>(gameServices, compositeResolver, contractIdGenerator));
+
+        var objectFactory = new ResolvingObjectFactory<int, int>(gameServices, objectIdGenerator, compositeResolver);
 
 
         var snakeTemplate = new ObjectTemplateBuilder()
