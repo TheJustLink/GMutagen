@@ -1,19 +1,17 @@
 ﻿using System;
+using System.Collections.Generic;
 
 using Microsoft.Extensions.DependencyInjection;
 
 using GMutagen.v8.Values;
-
-using Newtonsoft.Json.Linq;
-
 using GMutagen.v8.Generators;
 using GMutagen.v8.Contracts.Resolving;
-using GMutagen.v8.Contracts.Resolving.Attributes;
 using GMutagen.v8.Contracts.Resolving.Nodes;
 using GMutagen.v8.Objects;
 using GMutagen.v8.Objects.Templates;
 using GMutagen.v8.Contracts;
 using GMutagen.v8.IO.Sources.Dictionary;
+using GMutagen.v8.IO;
 
 namespace Roguelike;
 
@@ -21,6 +19,8 @@ public interface ITestContract
 {
     IValue<int> Number1 { get; set; }
     IValue<int> Number2 { get; set; }
+
+    void Test();
 }
 public interface INameContract
 {
@@ -40,6 +40,44 @@ public class TestContract : ITestContract
     {
         Number1 = number1;
         Number2 = number2;
+    }
+
+    public void Test()
+    {
+        Console.WriteLine($"{Number1.Value} + {Number2.Value} = {Number1.Value + Number2.Value}");
+    }
+}
+public class TestContract2 : ITestContract
+{
+    public IValue<int> Number1 { get; set; }
+    public IValue<int> Number2 { get; set; }
+    
+    private readonly IValue<string> _state;
+
+    public TestContract2(IValue<int> number1, IValue<int> number2, IValue<string> state)
+    {
+        Number1 = number1;
+        Number2 = number2;
+        _state = state;
+    }
+
+    public void Test()
+    {
+        Console.WriteLine($"State = {_state.Value}");
+
+        if (_state.Value == "StartCalculation")
+        {
+            Console.WriteLine($"{Number1.Value} + {Number2.Value} = {Number1.Value + Number2.Value}");
+            _state.Value = "Calculated";
+        }
+        else if (string.IsNullOrEmpty(_state.Value))
+        {
+            _state.Value = "StartCalculation";
+        }
+        else if (_state.Value == "Calculated")
+        {
+            Console.WriteLine("Already calculated!");
+        }
     }
 }
 
@@ -84,7 +122,7 @@ static class Program
             .Add(new ValueResolverFromStorage<int, int>(compositeResolver, valueIdGenerator))
             .Add(new ContractResolverFromConstructor<int, int, int>(gameServices, compositeResolver, contractIdGenerator));
 
-        var objectFactory = new ResolvingObjectFactory<int, int>(gameServices, objectIdGenerator, compositeResolver);
+        var objectFactory = new ResolvingObjectFactory<int, int, int, int>(gameServices, objectIdGenerator, compositeResolver);
 
 
         var snakeTemplate = new ObjectTemplateBuilder()
@@ -118,7 +156,20 @@ static class Program
         snakeBuilder.Set(godContract);
         for (var i = 0; i < 3; i++)
         {
-            var snake = snakeBuilder.Build();
+            IObject<int> snake;
+
+            if (i == 0)
+            {
+                snakeBuilder.Set<ITestContract, TestContract2>();
+                snake = snakeBuilder.Build();
+                snakeBuilder.Set<ITestContract>(godContract);
+            }
+            else
+            {
+                snake = snakeBuilder.Build();
+            }
+
+            
             var testContract = snake.Get<ITestContract>();
 
             Console.WriteLine("Object Id - " + snake.Id);
@@ -132,6 +183,8 @@ static class Program
             Console.WriteLine("After");
             Console.WriteLine(testContract.Number1.Value);
             Console.WriteLine(testContract.Number2.Value);
+            Console.WriteLine("Test:");
+            testContract.Test();
             Console.WriteLine();
         }
 
@@ -166,4 +219,53 @@ static class Program
 
         Console.ReadKey(true);
     }
+}
+
+public class Migration<TValueId, TContractId, TSlotId, TObjectId>
+{
+    private IReadWrite<TValueId, object> _objects;
+    private IReadWrite<TContractId, ContractValue<TSlotId, TValueId>> _contracts;
+    private IReadWrite<TObjectId, ObjectValue<TContractId>> _values;
+
+    private List<MigrationOperation> _operations;
+
+    public Migration(IReadWrite<TValueId, object> objects, IReadWrite<TContractId, ContractValue<TSlotId, TValueId>> contracts, IReadWrite<TObjectId, ObjectValue<TContractId>> values) 
+    {
+        _objects = objects;
+        _contracts = contracts;
+        _values = values;
+        _operations = new List<MigrationOperation>();
+    }
+
+    public Migration<TValueId, TContractId, TSlotId, TObjectId> ChangeRealization()
+    {
+        _operations.Add(new ChangeRealization());
+        return this;
+    }
+
+    public Migration<TValueId, TContractId, TSlotId, TObjectId> ChangeContract()
+    {
+        _operations.Add(new ChangeContract());
+        return this;
+    }
+
+    public Migration<TValueId, TContractId, TSlotId, TObjectId> ChangeContractAndRealization() 
+    {
+        _operations.Add(new ChangeContractAndRealization());
+        return this; 
+    }
+}
+
+public class MigrationOperation
+{
+}
+
+public class ChangeContractAndRealization : MigrationOperation
+{ 
+}
+public class ChangeContract  : MigrationOperation 
+{ 
+}
+public class ChangeRealization : MigrationOperation
+{ 
 }

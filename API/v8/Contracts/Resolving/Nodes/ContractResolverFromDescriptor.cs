@@ -23,7 +23,7 @@ public class ContractResolverFromDescriptor<TContractId> : IContractResolverNode
 
         if (implementation is not null)
         {
-            DefineContractForObject(context.Services, implementation, implementationType);
+            DefineContractForObject(context.Services, implementation, context.Contract.Type);
 
             context.Result = implementation;
             return true;
@@ -45,13 +45,13 @@ public class ContractResolverFromDescriptor<TContractId> : IContractResolverNode
         context.Result = implementationContext.Result;
         return true;
     }
-    private void DefineContractForObject(ContextServices services, object implementation, Type implementationType)
+    private void DefineContractForObject(ContextServices services, object implementation, Type contractType)
     {
         var hasObject = services.TryGet<ObjectValue<TContractId>>(out var objectValue);
         if (hasObject is false) return;
 
         var cache = services.Get<ContractRuntimeCache<TContractId>>()!;
-        objectValue[implementationType] = cache.TryGetByImplementation(implementation, out var contractId)
+        objectValue[contractType] = cache.TryGetByImplementation(implementation, out var contractId)
             ? contractId
             : _contractIdGenerator.Generate();
     }

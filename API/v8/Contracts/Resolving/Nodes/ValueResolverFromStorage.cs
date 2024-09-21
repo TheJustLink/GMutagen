@@ -76,10 +76,10 @@ public class ValueResolverFromStorage<TSlotId, TValueId> : IContractResolverNode
     }
     private TValueId GetValueId(ContractValue<TSlotId, TValueId> contractValue, TSlotId slotId)
     {
-        if (contractValue.TryGetValue(slotId, out var valueId) is false)
+        if (contractValue.Slots.TryGetValue(slotId, out var valueId) is false)
         {
             valueId = _valueIdGenerator.Generate();
-            contractValue[slotId] = valueId;
+            contractValue.Slots[slotId] = valueId;
         }
 
         return valueId;

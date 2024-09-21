@@ -25,12 +25,12 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
     {
         var hasObject = context.Services.TryGet<ObjectValue<TContractId>>(out var objectValue);
         if (hasObject is false) return false;
+        if (context.Key is not Type contractType) return false;
 
-        var contractType = context.Contract.Type;
         var contractId = GetContractId(objectValue, contractType);
 
         return ResolveFromCache(context, contractId)
-            || ResolveFromInstantiation(context, contractId, contractType);
+            || ResolveFromInstantiation(context, contractId);
     }
     
     private TContractId GetContractId(ObjectValue<TContractId> objectValue, Type contractType)
@@ -53,23 +53,23 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
         context.Result = implementation;
         return true;
     }
-    private bool ResolveFromInstantiation(ContractResolverContext context, TContractId contractId, Type contractType)
+    private bool ResolveFromInstantiation(ContractResolverContext context, TContractId contractId)
     {
-        var contractValue = GetContractValue(contractId);
+        var contractValue = GetContractValue(contractId, context.Contract.Type);
         context.Services.Set(contractValue);
 
-        var constructors = contractType.GetConstructors();
+        var constructors = contractValue.Type.GetConstructors();
         var isResolved = constructors.Any(constructor => ResolveConstructor(context, constructor));
 
         if (isResolved) PutToCache(context.Services, contractId, context.Result!);
 
         return isResolved;
     }
-    private ContractValue<TSlotId, TValueId> GetContractValue(TContractId contractId)
+    private ContractValue<TSlotId, TValueId> GetContractValue(TContractId contractId, Type implementationType)
     {
         var contracts = _services.GetContractValues<TContractId, TSlotId, TValueId>();
         if (contracts.TryGet(contractId, out var contractValue) is false)
-            contractValue = contracts[contractId] = new();
+            contractValue = contracts[contractId] = new(implementationType);
 
         return contractValue;
     }
