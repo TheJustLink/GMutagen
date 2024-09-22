@@ -11,6 +11,7 @@ public class LoggerRepository<TId, TValue> : IReadWrite<TId, TValue> where TId :
 {
     private readonly IReadWrite<TId, TValue> _source;
 
+    public int Count => _source.Count;
     public TValue this[TId id]
     {
         get => Read(id);

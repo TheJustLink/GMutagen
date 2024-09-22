@@ -49,11 +49,13 @@ public class FileRepository<TId, TValue> : IReadWrite<TId, TValue>, IDisposable
         }
     }
 
+    public int Count => _source.Count;
     public TValue this[TId id]
     {
         get => Read(id);
         set => Write(id, value);
     }
+
     public void Write(TId id, TValue value)
     {
         _lines[id] = value;

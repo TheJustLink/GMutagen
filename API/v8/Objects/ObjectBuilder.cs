@@ -22,6 +22,10 @@ public class ObjectBuilder<TId>
     {
         return _objectFactory.Create(_contracts);
     }
+    public IObject<TId> Build(TId id)
+    {
+        return _objectFactory.Create(_contracts, id);
+    }
 
     public ObjectBuilder<TId> SetObjectFactory(IObjectFactory<TId> objectFactory)
     {

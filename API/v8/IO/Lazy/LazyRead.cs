@@ -17,7 +17,9 @@ public class LazyRead<TId, TValue> : IRead<TId, TValue> where TId : notnull
         _valueFactory = valueFactory;
     }
 
+    public int Count => _reader.Count;
     public TValue this[TId id] => Read(id);
+
     public TValue Read(TId id)
     {
         if (_reader.Contains(id))

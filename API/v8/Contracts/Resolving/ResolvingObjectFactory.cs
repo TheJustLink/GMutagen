@@ -31,45 +31,36 @@ public class ResolvingObjectFactory<TObjectId, TContractId, TSlotId, TValueId> :
     public IObject<TObjectId> Create(Dictionary<Type, ContractDescriptor> contracts)
     {
         var objectId = _idGenerator.Generate();
+
+        return Create(contracts, objectId);
+    }
+    public IObject<TObjectId> Create(Dictionary<Type, ContractDescriptor> contracts, TObjectId objectId)
+    {
         var objects = _services.GetObjectValues<TObjectId, TContractId>();
-        
-        Dictionary<Type, object> implementations;
 
         var hasObject = objects.TryGet(objectId, out var objectValue);
         if (hasObject is false)
         {
             objectValue = objects[objectId] = new();
-            _buildServices.Set(objectValue);
-            implementations = CreateNewImplementations(contracts);
+            SetContractDescriptorsFromObject(objectValue, contracts);
         }
-        else
-        {
-            _buildServices.Set(objectValue);
-            implementations = LoadImplementations(objectValue);
-        }
+        _buildServices.Set(objectValue);
+
+        var implementations = CreateImplementations(contracts);
 
         return new Object<TObjectId>(objectId, implementations);
     }
-    private Dictionary<Type, object> LoadImplementations(ObjectValue<TContractId> objectValue)
+    private void SetContractDescriptorsFromObject(ObjectValue<TContractId> objectValue, Dictionary<Type, ContractDescriptor> contractDescriptors)
     {
         var contracts = _services.GetContractValues<TContractId, TSlotId, TValueId>();
-        var implementations = new Dictionary<Type, object>(objectValue.Count);
 
         foreach (var contract in objectValue)
         {
             var contractValue = contracts.Read(contract.Value);
-            var contractDescriptor = new ContractDescriptor(contractValue.Type);
-            var context = new ContractResolverContext(contractDescriptor, _buildServices)
-            {
-                Key = contract.Key
-            };
-
-            implementations[contract.Key] = Resolve(context);
+            contractDescriptors[contract.Key] = new ContractDescriptor(contractValue.Type);
         }
-
-        return implementations;
     }
-    private Dictionary<Type, object> CreateNewImplementations(Dictionary<Type, ContractDescriptor> contracts)
+    private Dictionary<Type, object> CreateImplementations(Dictionary<Type, ContractDescriptor> contracts)
     {
         var implementations = new Dictionary<Type, object>(contracts.Count);
 

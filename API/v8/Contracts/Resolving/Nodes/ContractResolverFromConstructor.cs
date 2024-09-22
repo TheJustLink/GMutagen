@@ -30,7 +30,7 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
         var contractId = GetContractId(objectValue, contractType);
 
         return ResolveFromCache(context, contractId)
-            || ResolveFromInstantiation(context, contractId);
+            || ResolveFromInstantiation(context, objectValue, contractId);
     }
     
     private TContractId GetContractId(ObjectValue<TContractId> objectValue, Type contractType)
@@ -53,13 +53,13 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
         context.Result = implementation;
         return true;
     }
-    private bool ResolveFromInstantiation(ContractResolverContext context, TContractId contractId)
+    private bool ResolveFromInstantiation(ContractResolverContext context, ObjectValue<TContractId> objectValue, TContractId contractId)
     {
         var contractValue = GetContractValue(contractId, context.Contract.Type);
         context.Services.Set(contractValue);
 
         var constructors = contractValue.Type.GetConstructors();
-        var isResolved = constructors.Any(constructor => ResolveConstructor(context, constructor));
+        var isResolved = constructors.Any(constructor => ResolveConstructor(context, objectValue, constructor));
 
         if (isResolved) PutToCache(context.Services, contractId, context.Result!);
 
@@ -74,7 +74,7 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
         return contractValue;
     }
 
-    private bool ResolveConstructor(ContractResolverContext context, ConstructorInfo constructor)
+    private bool ResolveConstructor(ContractResolverContext context, ObjectValue<TContractId> objectValue, ConstructorInfo constructor)
     {
         var parameters = constructor.GetParameters();
         var resultParameters = new object[parameters.Length];
@@ -84,7 +84,7 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
             var parameterInfo = parameters[i];
             context.Key = i;
 
-            if (ResolveParameter(context, parameterInfo, out var parameter) is false)
+            if (ResolveParameter(context, objectValue, parameterInfo, out var parameter) is false)
                 return false;
 
             resultParameters[i] = parameter!;
@@ -93,9 +93,15 @@ public class ContractResolverFromConstructor<TContractId, TSlotId, TValueId> : I
         context.Result = constructor.Invoke(resultParameters);
         return true;
     }
-    private bool ResolveParameter(ContractResolverContext context, ParameterInfo parameterInfo, out object? parameter)
+    private bool ResolveParameter(ContractResolverContext context, ObjectValue<TContractId> objectValue, ParameterInfo parameterInfo, out object? parameter)
     {
         parameter = default;
+
+        if (objectValue.TryGetValue(parameterInfo.ParameterType, out var contractId) && ResolveFromCache(context, contractId))
+        {
+            parameter = context.Result;
+            return true;
+        }
 
         var parameterContract = new ContractDescriptor(parameterInfo.ParameterType);
         var parameterContext = new ContractResolverContext(parameterContract, context.Services)

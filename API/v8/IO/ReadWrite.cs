@@ -11,6 +11,7 @@ public class ReadWrite<TId, TValue> : IReadWrite<TId, TValue> where TId : notnul
         _writer = writer;
     }
 
+    public int Count => _reader.Count;
     public TValue this[TId id]
     {
         get => _reader[id];

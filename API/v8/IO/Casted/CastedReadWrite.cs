@@ -13,6 +13,7 @@ public class CastedReadWrite<TId, TValue> : IReadWrite<TId, TValue> where TId : 
         _writer = writer;
     }
 
+    public int Count => _reader.Count;
     public TValue this[TId id]
     {
         get => (TValue)_reader[id];

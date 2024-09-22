@@ -9,6 +9,7 @@ public class TestMemory<TValue> : IReadWrite<int, TValue>, IGenerator<int>
     private readonly List<TValue> _memory = new();
     private readonly LinkedList<int> _nextFree = new();
 
+    public int Count => _memory.Count;
     public TValue this[int id]
     {
         get => Read(id);
