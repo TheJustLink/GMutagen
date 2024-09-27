@@ -3,15 +3,15 @@ using System.Collections.Generic;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using GMutagen.v8.Values;
-using GMutagen.v8.Generators;
-using GMutagen.v8.Contracts.Resolving;
-using GMutagen.v8.Contracts.Resolving.Nodes;
-using GMutagen.v8.Objects;
-using GMutagen.v8.Objects.Templates;
-using GMutagen.v8.Contracts;
-using GMutagen.v8.IO.Sources.Dictionary;
-using GMutagen.v8.IO;
+using GMutagen.Values;
+using GMutagen.Objects;
+using GMutagen.Contracts;
+using GMutagen.Contracts.Resolving;
+using GMutagen.Contracts.Resolving.Nodes;
+using GMutagen.Generators;
+using GMutagen.IO;
+using GMutagen.IO.Sources.Dictionary;
+using GMutagen.Objects.Templates;
 
 namespace Roguelike;
 
