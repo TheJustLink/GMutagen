@@ -1,7 +1,7 @@
 ﻿using System;
-using GMutagen.v8.Contracts;
-using GMutagen.v8.IO;
-using GMutagen.v8.Objects;
+using GMutagen.v9.Contracts;
+using GMutagen.v9.IO;
+using GMutagen.v9.Objects;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GMutagen.v9.Extensions;

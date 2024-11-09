@@ -1,6 +1,6 @@
 using System;
 
-namespace GMutagen.v9;
+namespace GMutagen.v9.Contracts.Resolving.Attributes;
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
 public class IdAttribute : Attribute

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using GMutagen.v8.Contracts;
-using GMutagen.v8.Objects.Templates;
+using GMutagen.v9.Contracts;
+using GMutagen.v9.Objects.Templates;
 
 namespace GMutagen.v9.Objects;
 

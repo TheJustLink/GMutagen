@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Reflection;
+using GMutagen.v9.Contracts.Resolving.Attributes;
 using GMutagen.v9.Extensions;
 
 namespace GMutagen.v9.Contracts.Resolving.Nodes.From;

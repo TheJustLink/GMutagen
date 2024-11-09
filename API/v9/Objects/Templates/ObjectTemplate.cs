@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using GMutagen.v8.Contracts;
+using GMutagen.v9.Contracts;
 
 namespace GMutagen.v9.Objects.Templates;
 
