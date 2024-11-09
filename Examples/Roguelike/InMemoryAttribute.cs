@@ -1,4 +1,4 @@
-using GMutagen.v8.Contracts.Resolving.Attributes;
+using GMutagen.Contracts.Resolving.Attributes;
 
 namespace Roguelike;
 

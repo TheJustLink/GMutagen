@@ -1,7 +1,6 @@
 ﻿using System;
-
-using GMutagen.v8.Contracts.Resolving.Attributes;
-using GMutagen.v8.IO;
+using GMutagen.Contracts.Resolving.Attributes;
+using GMutagen.IO;
 
 namespace Roguelike;
 
