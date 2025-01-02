@@ -1,9 +1,10 @@
 using System;
+using GMutagen.v9.Contracts.Resolving.Contexts;
 using GMutagen.v9.Extensions;
 
 namespace GMutagen.v9.Contracts.Resolving.Nodes.From;
 
-public class FromContainer : IContractResolverNode
+public class FromContainer : IResolverNode
 {
     private readonly IServiceProvider _services;
     
@@ -14,10 +15,22 @@ public class FromContainer : IContractResolverNode
 
     public bool Resolve(Context context)
     {
-        context.Instance = context.Key is not null
-            ? _services.GetKeyedService(context.Type, context.Key)
-            : _services.GetService(context.Type);
+        if (context.Keys == null)
+        {
+            var instance = _services.GetService(context.Type);
+            context.Instance = instance;
+            return instance is not null;
+        }
 
-        return context.Instance is not null;
+        foreach (var key in context.Keys)
+        {
+            var instance = _services.GetKeyedService(context.Type, key);
+            context.Instance = instance;
+            
+            if(instance is not null)
+                return true;
+        }
+
+        return false;
     }
 }

@@ -4,14 +4,18 @@ using GMutagen.v9.Contracts.Resolving.Attributes;
 using GMutagen.v9.Contracts.Resolving.Contexts;
 using GMutagen.v9.Contracts.Resolving.Contexts.Key;
 using GMutagen.v9.Contracts.Resolving.Contexts.Option;
+using GMutagen.v9.Contracts.Resolving.Nodes.From;
 using GMutagen.v9.Extensions;
 
-namespace GMutagen.v9.Contracts.Resolving.Nodes.From;
+namespace GMutagen.v9.Contracts.Resolving.Nodes.Internal;
 
-public class FromConstructor(IResolverNode resolver) : RecursiveResolverNode(resolver)
+public class ContractResolver(IResolverNode resolver) : RecursiveResolverNode(resolver)
 {
     public override bool Resolve(Context context)
     {
+        if (!typeof(IContract).IsAssignableTo(context.Type))
+            return false;
+        
         var constructors = context.Type.GetConstructors();
         var isResolved = constructors.Any(constructor => ResolveConstructor(context, constructor));
         return isResolved;
@@ -26,10 +30,12 @@ public class FromConstructor(IResolverNode resolver) : RecursiveResolverNode(res
         {
             var parameterInfo = parameters[i];
 
-            if (!ResolveParameter(context, parameterInfo, i, out var parameter))
+            var success = ResolveParameter(context, parameterInfo, i, out var parameter);
+            
+            if(success is false)
                 return false;
 
-            resultParameters[i] = parameter;
+            resultParameters[i] = parameter!;
         }
 
         context.Instance = constructor.Invoke(resultParameters);
@@ -38,23 +44,23 @@ public class FromConstructor(IResolverNode resolver) : RecursiveResolverNode(res
 
     private bool ResolveParameter(Context context, ParameterInfo parameterInfo, int index, out object? parameter)
     {
-        var keys = GetKeysFor(parameterInfo);
-        keys.Add(KeyType.Index, index);
-        
+        var keys = GetKeysFor(parameterInfo)
+            .Add(KeyType.Index, index);
+
         var options = GetOptionsFor(parameterInfo);
-        
+
         var parameterContext = new Context(parameterInfo.ParameterType, keys, options, context);
-        
+
         var success = Resolver.Resolve(parameterContext);
         parameter = parameterContext.Instance;
-        
+
         return success;
     }
 
     private Keys GetKeysFor(ParameterInfo parameterInfo)
     {
         var key = new Keys();
-        
+
         var attributes = parameterInfo.GetCustomAttributes();
         if (attributes.Contains<IdAttribute>())
         {
@@ -68,7 +74,7 @@ public class FromConstructor(IResolverNode resolver) : RecursiveResolverNode(res
     private Options GetOptionsFor(ParameterInfo parameterInfo)
     {
         Options options = new Options();
-        
+
         var attributes = parameterInfo.GetCustomAttributes();
         if (attributes.Contains<ValueLocationAttribute>())
         {

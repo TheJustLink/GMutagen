@@ -1,8 +1,7 @@
 using System;
-using GMutagen.v9.Contracts;
+using GMutagen.v9.Contracts.Resolving.Nodes.MetaData;
 using GMutagen.v9.IO;
 using GMutagen.v9.IO.Sources.Dictionary;
-using GMutagen.v9.Objects;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GMutagen.v9.Extensions;
@@ -24,23 +23,23 @@ public static class ServiceCollectionExtensions
         where TValueId : notnull
     {
         services.AddValues(storageFactory.CreateReadWrite<TValueId, object>);
-        services.AddContracts(storageFactory.CreateReadWrite<TContractId, ContractValue<TSlotId, TValueId>>);
-        services.AddObjects(storageFactory.CreateReadWrite<TObjectId, ObjectValue<TContractId>>);
+        /*services.AddContracts(storageFactory.CreateReadWrite<TContractId, ContractValue<TSlotId, TValueId>>);*/
+        services.AddObjects(storageFactory.CreateReadWrite<TObjectId, ObjectMetaData<TContractId>>);
 
         return services;
     }
 
-    public static IServiceCollection AddObjects<TId, TContractId>(this IServiceCollection services, Func<IReadWrite<TId, ObjectValue<TContractId>>> storageFactory)
+    public static IServiceCollection AddObjects<TId, TContractId>(this IServiceCollection services, Func<IReadWrite<TId, ObjectMetaData<TContractId>>> storageFactory)
         where TId : notnull
     {
         return services.AddStorage(storageFactory);
     }
-    public static IServiceCollection AddContracts<TId, TSlotId, TValueId>(this IServiceCollection services, Func<IReadWrite<TId, ContractValue<TSlotId, TValueId>>> storageFactory)
+    /*public static IServiceCollection AddContracts<TId, TSlotId, TValueId>(this IServiceCollection services, Func<IReadWrite<TId, ContractValue<TSlotId, TValueId>>> storageFactory)
         where TId : notnull
         where TSlotId : notnull
     {
         return services.AddStorage(storageFactory);
-    }
+    }*/
     public static IServiceCollection AddValues<TId>(this IServiceCollection services, Func<IReadWrite<TId, object>> storageFactory)
         where TId : notnull
     {
