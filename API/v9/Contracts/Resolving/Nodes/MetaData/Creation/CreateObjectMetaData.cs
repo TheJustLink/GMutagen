@@ -1,4 +1,3 @@
-using GMutagen.v9.Generators;
 using GMutagen.v9.IO;
 using GMutagen.v9.Contracts.Resolving.Contexts;
 using GMutagen.v9.Contracts.Resolving.Contexts.Key;
@@ -11,7 +10,7 @@ public class CreateObjectMetaData<TId, TContractId>(
 {
     public bool Resolve(Context context)
     {
-        if (typeof(IObject).IsAssignableFrom(context.Type))
+        if (!context.Type.IsAssignableTo(typeof(IObject)))
             return false;
         
         var success = context.TryGetKey<TId>(KeyType.Id, out var id);

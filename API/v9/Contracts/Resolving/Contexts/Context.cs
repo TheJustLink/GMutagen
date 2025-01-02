@@ -27,6 +27,7 @@ public class Context
     {
         Cache = new Dictionary<object, object>();
         Type = type;
+        Options = options;
         ParentContext = parentContext;
         Keys = keys;
     }
@@ -51,5 +52,16 @@ public class Context
 
         var success = Keys.TryGetKey(keyType, out key);
         return success;
+    }
+
+    public static Context From(Context context, Type? type = null, Keys? keys = null, Options? options = null, Context? parentContext = null)
+    {
+        var newType = type ?? context.Type;
+        var newKeys = keys ?? context.Keys;
+        var newOptions = options ?? context.Options;
+        var newParent = parentContext ?? context.ParentContext;
+        
+        var newContext = new Context(newType, newKeys, newOptions, newParent);
+        return newContext;
     }
 }

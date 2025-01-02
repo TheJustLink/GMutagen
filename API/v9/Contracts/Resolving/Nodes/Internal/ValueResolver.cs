@@ -26,7 +26,10 @@ public class ValueResolver<TValueId>(IResolverNode resolver) : RecursiveResolver
         if (success is false)
             return false;
 
-        context.Instance = TryCreateExternalValue(storage!, valueType, context);
+        success = TryCreateExternalValue(storage!, valueType, context);
+        
+        if (success is false)
+            return false;
 
         return true;
     }
@@ -48,6 +51,9 @@ public class ValueResolver<TValueId>(IResolverNode resolver) : RecursiveResolver
     private bool TryCreateExternalValue(object storage, Type valueType, Context context)
     {
         var success = context.TryGetKey<TValueId>(KeyType.Id, out var valueId);
+        if (success is false)
+            success = context.TryGetKey<TValueId>(KeyType.Index, out valueId);
+
         if (success is false)
             return false;
         

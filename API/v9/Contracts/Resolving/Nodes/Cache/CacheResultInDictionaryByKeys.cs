@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using GMutagen.v9.Contracts.Resolving.Contexts;
+using GMutagen.v9.Contracts.Resolving.Contexts.Key;
 using GMutagen.v9.Contracts.Resolving.Nodes.From;
 
 namespace GMutagen.v9.Contracts.Resolving.Nodes.Cache;
 
-public class CacheResultInDictionaryByKeys(IResolverNode resolver, Dictionary<object?, object> cache)
+public class CacheResultInDictionaryByKeys(IResolverNode resolver, Dictionary<object?, object> cache, KeyType[] keys)
     : RecursiveResolverNode(resolver)
 {
     public override bool Resolve(Context context)
@@ -15,13 +16,16 @@ public class CacheResultInDictionaryByKeys(IResolverNode resolver, Dictionary<ob
 
         return success;
     }
-    
+
     private void Cache(Context context)
     {
-        if (context.Keys == null)
-            return;
-
-        foreach (var key in context.Keys)
+        foreach (var keyType in keys)
+        {
+            var success = context.TryGetKey<object>(keyType, out var key);
+            if(success is false)
+                continue;
+            
             cache[key] = context.Instance!;
+        }
     }
 }

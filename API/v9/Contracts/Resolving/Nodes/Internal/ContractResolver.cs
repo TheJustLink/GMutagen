@@ -13,7 +13,7 @@ public class ContractResolver(IResolverNode resolver) : RecursiveResolverNode(re
 {
     public override bool Resolve(Context context)
     {
-        if (!typeof(IContract).IsAssignableTo(context.Type))
+        if (!context.Type.IsAssignableTo(typeof(IContract)))
             return false;
         
         var constructors = context.Type.GetConstructors();
@@ -44,14 +44,20 @@ public class ContractResolver(IResolverNode resolver) : RecursiveResolverNode(re
 
     private bool ResolveParameter(Context context, ParameterInfo parameterInfo, int index, out object? parameter)
     {
+        parameter = null;
+        
         var keys = GetKeysFor(parameterInfo)
-            .Add(KeyType.Index, index);
+            .Add(KeyType.Index, index)
+            .Add(KeyType.DeclaredType, parameterInfo.ParameterType);
 
         var options = GetOptionsFor(parameterInfo);
 
         var parameterContext = new Context(parameterInfo.ParameterType, keys, options, context);
 
         var success = Resolver.Resolve(parameterContext);
+        if (success is false)
+            return false;
+        
         parameter = parameterContext.Instance;
 
         return success;
@@ -79,7 +85,7 @@ public class ContractResolver(IResolverNode resolver) : RecursiveResolverNode(re
         if (attributes.Contains<ValueLocationAttribute>())
         {
             var valueLocationAttribute = attributes.Get<ValueLocationAttribute>();
-            options.Add(OptionType.Location, valueLocationAttribute.GetType());
+            options.Add(OptionType.Location, valueLocationAttribute.LocationType);
         }
 
         return options;

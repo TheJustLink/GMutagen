@@ -10,15 +10,15 @@ public class ObjectTemplateBuilder
     public ObjectTemplate Build() => new(_contracts);
 
     public ObjectTemplateBuilder Add<TContract, TImplementation>()
-        where TContract : class where TImplementation : TContract
+        where TContract : class, IContract where TImplementation : TContract
     {
         return Add(ContractDescriptor.Create<TContract, TImplementation>());
     }
-    public ObjectTemplateBuilder Add<TContract>() where TContract : class
+    public ObjectTemplateBuilder Add<TContract>() where TContract : class, IContract
     {
         return Add(ContractDescriptor.Create<TContract>());
     }
-    public ObjectTemplateBuilder Add<TContract>(TContract implementation) where TContract : class
+    public ObjectTemplateBuilder Add<TContract>(TContract implementation) where TContract : class, IContract
     {
         return Add(ContractDescriptor.Create<TContract>(implementation));
     }

@@ -4,17 +4,20 @@ using GMutagen.v9.Contracts.Resolving.Nodes.From;
 
 namespace GMutagen.v9.Contracts.Resolving.Nodes.Cache;
 
-public class CacheResultInRootContextByKeys(IResolverNode resolver, KeyType[] keyTypes) : RecursiveResolverNode(resolver)
+public class CacheResultContextByKeys(IResolverNode resolver, KeyType[] keyTypes, int parentOffset) : RecursiveResolverNode(resolver)
 {
     public override bool Resolve(Context context)
     {
         var parentContext = context.ParentContext;
         var currentContext = context;
+
+        var index = 0;
         
-        while (parentContext != null)
+        while (parentContext != null && index < parentOffset)
         {
             currentContext = parentContext;
             parentContext = parentContext.ParentContext;
+            index++;
         }
 
         var success = Resolver.Resolve(context);

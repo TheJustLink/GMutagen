@@ -10,6 +10,9 @@ public class ContractDescriptor
 
     public ContractDescriptor(Type type, Type? implementationType = null, object? implementation = null)
     {
+        if (Type != null && !Type.IsAssignableFrom(typeof(IContract)))
+            throw new Exception();
+        
         Type = type;
         ImplementationType = implementationType;
         Implementation = implementation;
@@ -17,9 +20,9 @@ public class ContractDescriptor
 
     public override int GetHashCode() => Type.GetHashCode();
 
-    public static ContractDescriptor Create<TContract>() => new(typeof(TContract));
-    public static ContractDescriptor Create<TContract, TImplementation>() =>
+    public static ContractDescriptor Create<TContract>() where TContract : IContract => new(typeof(TContract));
+    public static ContractDescriptor Create<TContract, TImplementation>() where TContract : IContract =>
         new(typeof(TContract), typeof(TImplementation));
-    public static ContractDescriptor Create<TContract>(object? implementation) =>
+    public static ContractDescriptor Create<TContract>(object? implementation) where TContract : IContract =>
         new(typeof(TContract), implementation?.GetType(), implementation);
 }

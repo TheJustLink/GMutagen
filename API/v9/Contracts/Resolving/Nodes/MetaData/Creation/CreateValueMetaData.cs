@@ -8,18 +8,20 @@ namespace GMutagen.v9.Contracts.Resolving.Nodes.MetaData.Creation;
 
 public class CreateValueMetaData<TId>(
     IResolverNode resolver,
-    IReadWrite<TId, ValueMetaData<TId>> readWrite)
+    IReadWrite<TId, ValueMetaData<TId>> readWrite,
+    KeyType keyType)
     : RecursiveResolverNode(resolver)
     where TId : notnull
 {
     public override bool Resolve(Context context)
     {
-        if (typeof(IValue).IsAssignableFrom(context.Type))
+        if (!context.Type.IsAssignableTo(typeof(IValue)))
             return false;
         
-        var success = context.TryGetKey<TId>(KeyType.Id, out var id);
+        var success = context.TryGetKey<TId>(keyType, out var id);
         if (success is false)
             return false;
+        
         
         var meta = new ValueMetaData<TId>(id);
 

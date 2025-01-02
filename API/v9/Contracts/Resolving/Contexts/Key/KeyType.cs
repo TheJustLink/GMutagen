@@ -4,5 +4,6 @@ public enum KeyType
 {
     Index,
     Id,
+    DeclaredType,
     Meta,
 }

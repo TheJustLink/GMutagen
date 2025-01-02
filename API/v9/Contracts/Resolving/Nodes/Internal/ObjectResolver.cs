@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using GMutagen.Generators;
+using GMutagen.v9.Generators;
 using GMutagen.v9.Contracts.Resolving.Contexts;
 using GMutagen.v9.Contracts.Resolving.Contexts.Key;
 using GMutagen.v9.Contracts.Resolving.Contexts.Option;
@@ -14,7 +14,7 @@ public class ObjectResolver<TObjectId, TContractId>(IResolverNode resolver, IGen
 {
     public override bool Resolve(Context context)
     {
-        if (!typeof(IObject).IsAssignableTo(context.Type))
+        if (!context.Type.IsAssignableTo(typeof(IObject)))
             return false;
         
         var successGetKey = context.TryGetKey<TObjectId>(KeyType.Id, out var id);
@@ -28,25 +28,37 @@ public class ObjectResolver<TObjectId, TContractId>(IResolverNode resolver, IGen
         if (successGetOption is false)
             return false;
 
-        var implementations = CreateImplementations(contracts);
+        var successCreation = TryCreateImplementations(contracts, context, out var implementations);
+
+        if (successCreation is false)
+            return false;
+        
         var obj = new Object<TObjectId>(id, implementations);
         context.Instance = obj;
         return true;
     }
     
-    private Dictionary<Type, object> CreateImplementations(Dictionary<Type, ContractDescriptor> contracts)
+    private bool TryCreateImplementations(Dictionary<Type, ContractDescriptor> contracts, Context context,
+        out Dictionary<Type, object> implementations)
     {
-        var implementations = new Dictionary<Type, object>(contracts.Count);
+        implementations = new Dictionary<Type, object>(contracts.Count);
         
-        foreach (var (type, _) in contracts)
+        foreach (var (type, descriptor) in contracts)
         {
             var id = generator.Generate();
-            var keys = new Keys(1).Add(KeyType.Id, id);
+            var keys = new Keys(2)
+                .Add(KeyType.Id, id)
+                .Add(KeyType.DeclaredType, type);
             
-            var context = new Context(type, keys);
-            implementations[type] = Resolver.Resolve(context);
+            var contractContext = new Context(descriptor.ImplementationType!, keys, parentContext: context);
+            var success = Resolver.Resolve(contractContext);
+            
+            if (success)
+                implementations[type] = contractContext.Instance!;
+            else
+                return false;
         }
 
-        return implementations;
+        return true;
     }
 }

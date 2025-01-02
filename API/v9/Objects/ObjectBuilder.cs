@@ -47,11 +47,11 @@ public class ObjectBuilder<TId>
         return this;
     }
 
-    public ObjectBuilder<TId> Set<TContract, TImplementation>() where TContract : class
+    public ObjectBuilder<TId> Set<TContract, TImplementation>() where TContract : class, IContract
     {
         return Set(ContractDescriptor.Create<TContract, TImplementation>());
     }
-    public ObjectBuilder<TId> Set<TContract>(TContract implementation) where TContract : class
+    public ObjectBuilder<TId> Set<TContract>(TContract implementation) where TContract : class, IContract
     {
         return Set(ContractDescriptor.Create<TContract>(implementation));
     }

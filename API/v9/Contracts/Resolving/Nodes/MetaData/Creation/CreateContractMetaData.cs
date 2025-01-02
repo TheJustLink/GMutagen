@@ -12,7 +12,7 @@ public class CreateContractMetaData<TId, TValueId>(
 {
     public override bool Resolve(Context context)
     {
-        if (typeof(IContract).IsAssignableFrom(context.Type))
+        if (!context.Type.IsAssignableTo(typeof(IContract)))
             return false;
 
         var success = context.TryGetKey<TId>(KeyType.Id, out var id);

@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using GMutagen.v9.Contracts.Resolving.Contexts.Option;
 
 namespace GMutagen.v9.Contracts.Resolving.Contexts.Key;
 
@@ -29,9 +28,9 @@ public class Keys : IEnumerable
         _pairs = pairs;
     }
 
-    public Keys Add(KeyType id, object? key)
+    public Keys Add(KeyType keyType, object? key)
     {
-        _pairs.Add(id, key);
+        _pairs.Add(keyType, key);
         return this;
     }
 
