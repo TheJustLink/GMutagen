@@ -4,4 +4,5 @@ public enum OptionType
 {
     Location,
     Contracts,
+    ContractsReversed,
 }

@@ -30,7 +30,7 @@ public class Keys : IEnumerable
 
     public Keys Add(KeyType keyType, object? key)
     {
-        _pairs.Add(keyType, key);
+        _pairs.TryAdd(keyType, key);
         return this;
     }
 

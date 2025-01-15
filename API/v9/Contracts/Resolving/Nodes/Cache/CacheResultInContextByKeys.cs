@@ -4,7 +4,7 @@ using GMutagen.v9.Contracts.Resolving.Nodes.From;
 
 namespace GMutagen.v9.Contracts.Resolving.Nodes.Cache;
 
-public class CacheResultContextByKeys(IResolverNode resolver, KeyType[] keyTypes, int parentOffset) : RecursiveResolverNode(resolver)
+public class CacheResultInContextByKeys(IResolverNode resolver, KeyType[] keyTypes, int parentOffset) : RecursiveResolverNode(resolver)
 {
     public override bool Resolve(Context context)
     {

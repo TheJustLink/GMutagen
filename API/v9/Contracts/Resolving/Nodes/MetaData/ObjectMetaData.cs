@@ -17,7 +17,7 @@ public class ObjectMetaData<TContractId> : IObjectMetaData
         var contractType = contractMetaData.Type;
 
         var keys = context.Keys;
-        var contractId = (TContractId)keys![KeyType.Index]!;
+        var contractId = (TContractId)keys![KeyType.Id]!;
 
         _contracts.TryAdd(contractType, contractId);
     }

@@ -85,14 +85,14 @@ public class Program
         var valueMetaStorage = dictionaryReadWriteFactory
             .CreateReadWrite<int, ValueMetaData<int>>();
 
-        var createValueMeta = new CreateValueMetaData<int>(metaFromAllContexts, valueMetaStorage, KeyType.Index);
+        var createValueMeta = new CreateValueMetaData<int>(metaFromAllContexts, valueMetaStorage, KeyType.Id);
         var valueResolverNode = new ValueResolver<int>(fullStorageResolver);
 
         var valueResolver = new CompositeResolverNode()
             .Add(createValueMeta)
             .Add(valueResolverNode);
 
-        var fromValueMetaCache = new FromValueMetaCache();
+        var fromValueMetaCache = new ValueFromMetaCache<int, int>(fullStorageResolver, KeyType.Id, valueMetaStorage);
 
         var fullValueResolver = new CompositeResolverNode()
             .Add(fromValueMetaCache)
@@ -105,26 +105,27 @@ public class Program
             .CreateReadWrite<int, ContractMetaData<int, int>>();
 
         var createContractMeta = new CreateContractMetaData<int, int>(metaFromAllContexts, contractMetaStorage);
-        var cacheCreateContractMeta = new CacheResultInRootContextByKeys(createContractMeta, [KeyType.Meta]);
-
         var fullContractResolver = new CompositeResolverNode();
 
-        var contractResolverNode = new ContractResolver(fullContractResolver);
+        var contractResolverNode = new ContractResolver<int>(fullContractResolver, valueIdGenerator);
         var cacheContractResolverNode =
             new CacheResultInRootContextByKeys(contractResolverNode, [KeyType.DeclaredType]);
 
         var contractResolver = new CompositeResolverNode()
-            .Add(cacheCreateContractMeta)
+            .Add(createContractMeta)
             .Add(cacheContractResolverNode);
 
-        var fromContractMetaCache = new FromContractMetaCache();
+        var fromContractMetaCache =
+            new ContractFromMetaCache<int, int>(fullContractResolver, KeyType.Id, contractMetaStorage);
+        
+        var cacheFromContractMetaCache = new CacheResultInRootContextByKeys(fromContractMetaCache, [KeyType.DeclaredType]);
 
         var mapContractInterface = new MapContractInterface(fullContractResolver);
 
         fullContractResolver
-            .Add(mapContractInterface)
             .Add(declaredTypeFromAllContexts)
-            .Add(fromContractMetaCache)
+            .Add(mapContractInterface)
+            .Add(cacheFromContractMetaCache)
             .Add(fromCollectionCache)
             .Add(contractResolver)
             .Add(fullValueResolver);
@@ -135,14 +136,13 @@ public class Program
             .CreateReadWrite<int, ObjectMetaData<int>>();
 
         var createObjectMeta = new CreateObjectMetaData<int, int>(objectMetaStorage);
-        var cacheCreateObjectMeta = new CacheResultInRootContextByKeys(createObjectMeta, [KeyType.Meta]);
         var objectResolverNode = new ObjectResolver<int, int>(fullContractResolver, contractIdGenerator);
 
         var objectResolver = new CompositeResolverNode()
-            .Add(cacheCreateObjectMeta)
+            .Add(createObjectMeta)
             .Add(objectResolverNode);
 
-        var fromObjectMetaCache = new FromObjectMetaCache();
+        var fromObjectMetaCache = new ObjectFromMetaCache<int>(fullContractResolver, KeyType.Id, objectMetaStorage);
 
         var fullObjectResolver = new CompositeResolverNode()
             .Add(fromObjectMetaCache)
@@ -167,7 +167,8 @@ public class Program
 
         var a = typeof(INameContract).IsAssignableTo(typeof(IContract));
 
-        var snake = snakeBuilder.Build();
+        var snake1 = snakeBuilder.Build();
+        var snake2 = snakeBuilder.Build(0);
         Console.ReadKey();
     }
 }

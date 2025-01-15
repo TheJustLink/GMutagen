@@ -1,13 +1,14 @@
 using System;
-using GMutagen.v9.IO;
 using GMutagen.v9.Contracts.Resolving.Contexts;
 using GMutagen.v9.Contracts.Resolving.Contexts.Key;
 using GMutagen.v9.Contracts.Resolving.Nodes.From;
+using GMutagen.v9.Contracts.Resolving.Nodes.Internal;
+using GMutagen.v9.IO;
 using GMutagen.v9.Values;
 
-namespace GMutagen.v9.Contracts.Resolving.Nodes.Internal;
+namespace GMutagen.v9.Contracts.Resolving.Nodes.MetaData;
 
-public class ValueResolver<TValueId>(IResolverNode resolver) : RecursiveResolverNode(resolver) where TValueId : notnull
+public class ValueFromMetaCache<TSlotId, TValueId>(IResolverNode resolver, KeyType idKeyType, IReadWrite<TSlotId, ValueMetaData<TValueId>> readWrite) : RecursiveResolverNode(resolver)
 {
     public override bool Resolve(Context context)
     {
@@ -20,13 +21,21 @@ public class ValueResolver<TValueId>(IResolverNode resolver) : RecursiveResolver
 
     private bool ResolveValue(Context context)
     {
+        if (!context.TryGetKey(idKeyType, out TSlotId slotId))
+            return false;
+
+        if (!readWrite.Contains(slotId))
+            return false;
+        
+        var metaData = readWrite.Read(slotId);
+        
         var valueType = context.Type.GenericTypeArguments[0];
 
         var success = TryResolveStorage(context, valueType, out var storage);
         if (success is false)
             return false;
 
-        success = TryCreateExternalValue(storage!, valueType, context);
+        success = TryCreateExternalValue(storage!, valueType, context, metaData.Id);
         
         if (success is false)
             return false;
@@ -48,14 +57,10 @@ public class ValueResolver<TValueId>(IResolverNode resolver) : RecursiveResolver
         return true;
     }
 
-    private bool TryCreateExternalValue(object storage, Type valueType, Context context)
+    private bool TryCreateExternalValue(object storage, Type valueType, Context context, TValueId id)
     {
-        var success = context.TryGetKey<TValueId>(KeyType.Id, out var valueId);
-        if (success is false)
-            return false;
-        
         var valueFactory = CreateValueFactory(valueType);
-        context.Instance = valueFactory.Create(valueId, storage);
+        context.Instance = valueFactory.Create(id, storage);
         return true;
     }
 
@@ -63,22 +68,5 @@ public class ValueResolver<TValueId>(IResolverNode resolver) : RecursiveResolver
     {
         var factoryType = typeof(ExternalValueFactory<,>).MakeGenericType(typeof(TValueId), valueType);
         return (Activator.CreateInstance(factoryType) as IValueFactory<TValueId>)!;
-    }
-}
-
-public interface IValueFactory<TValueId>
-{
-    object Create(TValueId id, object storage);
-}
-
-public class ExternalValueFactory<TValueId, TValueType> : IValueFactory<TValueId>
-{
-    public object Create(TValueId id, object storageObj)
-    {
-        var storage = (IReadWrite<TValueId, TValueType>)storageObj;
-        if (storage.Contains(id) is false)
-            storage[id] = default!;
-            
-        return new ExternalValue<TValueId, TValueType>(id, storage);
     }
 }

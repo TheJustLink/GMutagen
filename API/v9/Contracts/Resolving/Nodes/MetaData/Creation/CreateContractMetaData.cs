@@ -14,7 +14,7 @@ public class CreateContractMetaData<TId, TValueId>(
     {
         if (!context.Type.IsAssignableTo(typeof(IContract)))
             return false;
-
+        
         var success = context.TryGetKey<TId>(KeyType.Id, out var id);
         if (success is false)
             return false;
@@ -29,7 +29,13 @@ public class CreateContractMetaData<TId, TValueId>(
         objectMetaData.Store(context, meta);
 
         readWrite.Write(id, meta);
+        Cache(context, meta);
 
-        return Resolver.Resolve(context);
+        return false;
+    }
+    
+    private void Cache(Context parentContext, object result)
+    {
+        parentContext.Cache[typeof(IContractMetaData)] = result;
     }
 }

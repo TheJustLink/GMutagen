@@ -20,21 +20,32 @@ public class ResolvingObjectFactory<TObjectId>(
 
         return Create(contracts, objectId);
     }
+
     public IObject<TObjectId> Create(Dictionary<Type, ContractDescriptor> contracts, TObjectId objectId)
     {
         var keys = new Keys()
             .Add(KeyType.Id, objectId);
 
+        var reversedContracts = new Dictionary<Type, List<Type>>();
+
+        foreach (var (type, descriptor) in contracts)
+        {
+            if (reversedContracts.TryGetValue(descriptor.ImplementationType, out var list))
+                list.Add(type);
+            else
+                reversedContracts[descriptor.ImplementationType] = new List<Type>() { type };
+        }
+
         var options = new Options()
-            .Add(OptionType.Contracts, contracts);
-        
+            .Add(OptionType.Contracts, contracts)
+            .Add(OptionType.ContractsReversed, reversedContracts);
+
         var objContext = new Context(typeof(Object<TObjectId>), keys, options);
-        
-        if(resolver.Resolve(objContext) is false || objContext.Instance == null)
+
+        if (resolver.Resolve(objContext) is false || objContext.Instance == null)
             throw new InvalidOperationException($"Can't resolve {objContext.Type}");
 
         var obj = objContext.Instance;
         return (IObject<TObjectId>)obj;
     }
-    
 }

@@ -20,7 +20,13 @@ public class CreateObjectMetaData<TId, TContractId>(
         var meta = new ObjectMetaData<TContractId>();
         
         readWrite.Write(id, meta);
+        Cache(context, meta);
 
         return false;
+    }
+    
+    private void Cache(Context parentContext, object result)
+    {
+        parentContext.Cache[typeof(IObjectMetaData)] = result;
     }
 }

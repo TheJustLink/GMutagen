@@ -5,10 +5,14 @@ namespace GMutagen.v9.Contracts;
 public class ContractDescriptor
 {
     public readonly Type Type;
-    public readonly Type? ImplementationType;
+    public readonly Type ImplementationType;
     public readonly object? Implementation;
 
-    public ContractDescriptor(Type type, Type? implementationType = null, object? implementation = null)
+    public ContractDescriptor(Type type, object? implementation = null) : this(type, type, implementation)
+    {
+    }
+    
+    public ContractDescriptor(Type type, Type implementationType, object? implementation = null)
     {
         if (Type != null && !Type.IsAssignableFrom(typeof(IContract)))
             throw new Exception();
