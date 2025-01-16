@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GMutagen.v9.Objects.Interfaces;
 
 namespace GMutagen.v9.Objects;
 

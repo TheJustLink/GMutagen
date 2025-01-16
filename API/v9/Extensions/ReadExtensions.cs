@@ -1,4 +1,4 @@
-using GMutagen.v9.IO;
+using GMutagen.v9.IO.Interfaces;
 
 namespace GMutagen.v9.Extensions;
 

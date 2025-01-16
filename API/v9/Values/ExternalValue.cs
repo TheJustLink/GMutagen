@@ -1,4 +1,5 @@
-using GMutagen.v9.IO;
+using GMutagen.v9.IO.Interfaces;
+using GMutagen.v9.Values.Interfaces;
 
 namespace GMutagen.v9.Values;
 

@@ -28,6 +28,9 @@ public class Keys : IEnumerable
         _pairs = pairs;
     }
 
+    public Dictionary<KeyType, object?>.ValueCollection Values => _pairs.Values; 
+    public Dictionary<KeyType, object?>.KeyCollection KeyTypes => _pairs.Keys;
+
     public Keys Add(KeyType keyType, object? key)
     {
         _pairs.TryAdd(keyType, key);

@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
-using GMutagen.v9.Contracts;
+using GMutagen.v9.Contracts.Descriptors;
+using GMutagen.v9.Contracts.Interfaces;
+using GMutagen.v9.Objects.Factories.Interfaces;
+using GMutagen.v9.Objects.Interfaces;
 using GMutagen.v9.Objects.Templates;
 
 namespace GMutagen.v9.Objects;

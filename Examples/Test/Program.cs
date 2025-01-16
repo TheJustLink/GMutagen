@@ -1,17 +1,32 @@
 ﻿using GMutagen.v9.Contracts;
+using GMutagen.v9.Contracts.Interfaces;
 using GMutagen.v9.Contracts.Resolving;
 using GMutagen.v9.Contracts.Resolving.Contexts.Key;
 using GMutagen.v9.Contracts.Resolving.Nodes;
 using GMutagen.v9.Contracts.Resolving.Nodes.Cache;
+using GMutagen.v9.Contracts.Resolving.Nodes.Cache.Collection;
+using GMutagen.v9.Contracts.Resolving.Nodes.Cache.Context;
+using GMutagen.v9.Contracts.Resolving.Nodes.Cache.MetaData;
+using GMutagen.v9.Contracts.Resolving.Nodes.Composite;
 using GMutagen.v9.Contracts.Resolving.Nodes.From.Cache;
-using GMutagen.v9.Contracts.Resolving.Nodes.Internal;
+using GMutagen.v9.Contracts.Resolving.Nodes.From.Cache.Collection;
+using GMutagen.v9.Contracts.Resolving.Nodes.From.Cache.Context;
+using GMutagen.v9.Contracts.Resolving.Nodes.Internal.Common;
+using GMutagen.v9.Contracts.Resolving.Nodes.Internal.Resolvers;
 using GMutagen.v9.Contracts.Resolving.Nodes.MetaData;
 using GMutagen.v9.Contracts.Resolving.Nodes.MetaData.Creation;
+using GMutagen.v9.Contracts.Resolving.Nodes.MetaData.Models;
 using GMutagen.v9.Generators;
 using GMutagen.v9.IO.Sources.Dictionary;
+using GMutagen.v9.Logging;
+using GMutagen.v9.Logging.Logger;
+using GMutagen.v9.Logging.Logger.Common;
+using GMutagen.v9.Logging.Messages;
 using GMutagen.v9.Objects;
+using GMutagen.v9.Objects.Factories;
 using GMutagen.v9.Objects.Templates;
 using GMutagen.v9.Values;
+using GMutagen.v9.Values.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Test;
@@ -65,18 +80,25 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        var templateString = $"[{{{nameof(PlaceHolders.Date)}}} " +
+                             $"{{{nameof(PlaceHolders.Time)}}}] " +
+                             $"[{{{nameof(PlaceHolders.Level)}}}] " +
+                             $"{{{nameof(PlaceHolders.Message)}}}";
+        
+        var logger = new ConsoleLogger<Global>(new InterpolationString(templateString).AddInfo());
+
         var serviceCollection = new ServiceCollection();
 
         var dictionaryReadWriteFactory = new DictionaryReadWriteFactory();
 
-        var fromCollectionCache = new FromCollectionCache(serviceCollection);
+        var fromCollectionCache = new FromCollectionCache(serviceCollection, logger);
 
-        var metaFromAllContexts = new FromAllContextsCaches();
-        var declaredTypeFromAllContexts = new FromAllContextsCaches();
+        var metaFromAllContexts = new FromAllContextsCaches(logger);
+        var declaredTypeFromAllContexts = new FromAllContextsCaches(logger);
 
-        var storageResolverNode = new StorageResolver();
+        var storageResolverNode = new StorageResolver(logger);
         var cacheStorageResolverNode =
-            new CacheResultInCollection(storageResolverNode, serviceCollection, [KeyType.DeclaredType]);
+            new CacheResultInCollection(storageResolverNode, serviceCollection, [KeyType.DeclaredType], logger);
 
         var fullStorageResolver = new CompositeResolverNode()
             .Add(fromCollectionCache)
@@ -85,14 +107,14 @@ public class Program
         var valueMetaStorage = dictionaryReadWriteFactory
             .CreateReadWrite<int, ValueMetaData<int>>();
 
-        var createValueMeta = new CreateValueMetaData<int>(metaFromAllContexts, valueMetaStorage, KeyType.Id);
-        var valueResolverNode = new ValueResolver<int>(fullStorageResolver);
+        var createValueMeta = new CreateValueMetaData<int>(metaFromAllContexts, valueMetaStorage, logger);
+        var valueResolverNode = new ValueResolver<int>(fullStorageResolver, logger);
 
         var valueResolver = new CompositeResolverNode()
             .Add(createValueMeta)
             .Add(valueResolverNode);
 
-        var fromValueMetaCache = new ValueFromMetaCache<int, int>(fullStorageResolver, KeyType.Id, valueMetaStorage);
+        var fromValueMetaCache = new ValueFromMetaCache<int, int>(fullStorageResolver, KeyType.Id, valueMetaStorage, logger);
 
         var fullValueResolver = new CompositeResolverNode()
             .Add(fromValueMetaCache)
@@ -104,23 +126,24 @@ public class Program
         var contractMetaStorage = dictionaryReadWriteFactory
             .CreateReadWrite<int, ContractMetaData<int, int>>();
 
-        var createContractMeta = new CreateContractMetaData<int, int>(metaFromAllContexts, contractMetaStorage);
+        var createContractMeta = new CreateContractMetaData<int, int>(metaFromAllContexts, contractMetaStorage, logger);
         var fullContractResolver = new CompositeResolverNode();
 
-        var contractResolverNode = new ContractResolver<int>(fullContractResolver, valueIdGenerator);
+        var contractResolverNode = new ContractResolver<int>(fullContractResolver, valueIdGenerator, logger);
         var cacheContractResolverNode =
-            new CacheResultInRootContextByKeys(contractResolverNode, [KeyType.DeclaredType]);
+            new CacheResultInRootContextByKeys(contractResolverNode, [KeyType.DeclaredType], logger);
 
         var contractResolver = new CompositeResolverNode()
             .Add(createContractMeta)
             .Add(cacheContractResolverNode);
 
         var fromContractMetaCache =
-            new ContractFromMetaCache<int, int>(fullContractResolver, KeyType.Id, contractMetaStorage);
-        
-        var cacheFromContractMetaCache = new CacheResultInRootContextByKeys(fromContractMetaCache, [KeyType.DeclaredType]);
+            new ContractFromMetaCache<int, int>(fullContractResolver, KeyType.Id, contractMetaStorage, logger);
 
-        var mapContractInterface = new MapContractInterface(fullContractResolver);
+        var cacheFromContractMetaCache =
+            new CacheResultInRootContextByKeys(fromContractMetaCache, [KeyType.DeclaredType], logger);
+
+        var mapContractInterface = new MapContractInterface(fullContractResolver, logger);
 
         fullContractResolver
             .Add(declaredTypeFromAllContexts)
@@ -135,14 +158,15 @@ public class Program
         var objectMetaStorage = dictionaryReadWriteFactory
             .CreateReadWrite<int, ObjectMetaData<int>>();
 
-        var createObjectMeta = new CreateObjectMetaData<int, int>(objectMetaStorage);
-        var objectResolverNode = new ObjectResolver<int, int>(fullContractResolver, contractIdGenerator);
+        var createObjectMeta = new CreateObjectMetaData<int, int>(objectMetaStorage, logger);
+        var objectResolverNode = new ObjectResolver<int, int>(fullContractResolver, contractIdGenerator, logger);
 
         var objectResolver = new CompositeResolverNode()
             .Add(createObjectMeta)
             .Add(objectResolverNode);
 
-        var fromObjectMetaCache = new ObjectFromMetaCache<int>(fullContractResolver, KeyType.Id, objectMetaStorage);
+        var fromObjectMetaCache =
+            new ObjectFromMetaCache<int>(fullContractResolver, KeyType.Id, objectMetaStorage, logger);
 
         var fullObjectResolver = new CompositeResolverNode()
             .Add(fromObjectMetaCache)
@@ -155,7 +179,7 @@ public class Program
 
         var objectIdGenerator = new IncrementalGenerator<int>();
 
-        var objectFactory = new ResolvingObjectFactory<int>(objectIdGenerator, resolver);
+        var objectFactory = new ResolvingObjectFactory<int>(objectIdGenerator, resolver, logger);
 
         var snakeTemplate = new ObjectTemplateBuilder()
             .Add<INameContract, DefaultNameContract>()

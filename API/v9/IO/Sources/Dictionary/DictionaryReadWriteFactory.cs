@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using GMutagen.v9.IO.Factories;
+using GMutagen.v9.IO.Factories.Interfaces;
+using GMutagen.v9.IO.Interfaces;
 
 namespace GMutagen.v9.IO.Sources.Dictionary;
 

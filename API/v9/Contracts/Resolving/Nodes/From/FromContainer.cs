@@ -1,34 +1,55 @@
 using System;
 using GMutagen.v9.Contracts.Resolving.Contexts;
 using GMutagen.v9.Contracts.Resolving.Contexts.Key;
+using GMutagen.v9.Contracts.Resolving.Nodes.Interfaces;
 using GMutagen.v9.Extensions;
+using GMutagen.v9.Logging.Logger.Common;
+using GMutagen.v9.Logging.Logger.Interfaces;
+using GMutagen.v9.Logging.Messages;
 
 namespace GMutagen.v9.Contracts.Resolving.Nodes.From;
 
-public class FromContainer(IServiceProvider services) : IResolverNode
+public class FromContainer(IServiceProvider provider, ILogger<Global> logger) : IResolverNode
 {
     public bool Resolve(Context context)
     {
-        var success = context.TryGetKey<Type>(KeyType.DeclaredType, out var type);
-        if(success is false)
+        var keyType = KeyType.DeclaredType;
+        var success = context.TryGetKey<Type>(keyType, out var type);
+        if (success is false)
+        {
+            logger.LogWarning(new KeysDoNotContains(context.Keys, keyType, this));
             return false;
-        
+        }
+
         if (context.Keys == null)
         {
-            var instance = services.GetService(type);
+            var instance = provider.GetService(type);
             context.Instance = instance;
-            return instance is not null;
-        }
+            success = instance is not null;
 
-        foreach (var key in context.Keys)
-        {
-            var instance = services.GetKeyedService(type, key);
-            context.Instance = instance;
-            
-            if(instance is not null)
+            if (success)
+            {
+                logger.LogInfo(new SuccessfullyResolved(context, this));
                 return true;
+            }
+        }
+        else
+        {
+
+            foreach (var key in context.Keys)
+            {
+                var instance = provider.GetKeyedService(type, key);
+                context.Instance = instance;
+
+                if (instance is not null)
+                {
+                    logger.LogInfo(new SuccessfullyResolved(context, this));
+                    return true;
+                }
+            }
         }
 
+        logger.LogWarning(new CanNotResolveFromServicesCache(provider, context, this));
         return false;
     }
 }

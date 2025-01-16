@@ -16,13 +16,6 @@ public class Context
 
     public object? Instance;
 
-    public Context()
-    {
-        Cache = new Dictionary<object, object>();
-        Keys = null;
-        Options = null;
-    }
-
     public Context(Type type, Keys? keys = null, Options? options = null, Context? parentContext = null)
     {
         Cache = new Dictionary<object, object>();

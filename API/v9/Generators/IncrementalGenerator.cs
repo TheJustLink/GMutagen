@@ -1,5 +1,6 @@
 using System.Numerics;
-using GMutagen.v9.Values;
+using GMutagen.v9.Generators.Interfaces;
+using GMutagen.v9.Values.Interfaces;
 
 namespace GMutagen.v9.Generators;
 

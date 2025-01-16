@@ -1,5 +1,5 @@
 using System;
-using GMutagen.v9.Contracts.Resolving.Nodes.Internal;
+using GMutagen.v9.Contracts.Resolving.Nodes.Internal.Enums;
 
 namespace GMutagen.v9.Contracts.Resolving.Attributes;
 
