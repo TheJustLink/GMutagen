@@ -1,11 +1,29 @@
+using System.Runtime.CompilerServices;
+
 namespace GMutagen.v9.Logging.Logger.Interfaces
 {
     public interface ILogger<T>
     {
-        void Log(string message, LogLevel level = LogLevel.Info);
-        void LogInfo(string message);
-        void LogWarning(string message);
-        void LogError(string message);
-        void LogDebug(string message);
+        void Log(string message, LogLevel level = LogLevel.Info, 
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string memberName = "");
+
+        void LogInfo(string message,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string memberName = "");
+        void LogWarning(string message,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string memberName = "");
+        void LogError(string message,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string memberName = "");
+        void LogDebug(string message,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
+            [CallerMemberName] string memberName = "");
     }
 }

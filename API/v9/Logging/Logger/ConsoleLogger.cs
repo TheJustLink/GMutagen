@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using GMutagen.v9.Logging.Logger.Interfaces;
 using GMutagen.v9.Logging.Messages;
 
@@ -14,13 +15,18 @@ public class ConsoleLogger<T> : ILogger<T>
         _interpolationString = interpolationString;
     }
     
-    public void Log(string message, LogLevel level = LogLevel.Info)
+    public void Log(string message, LogLevel level = LogLevel.Info,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
     {
         Console.ForegroundColor = GetColorForLevel(level);
 
         var place = new Dictionary<string, string>();
         place[$"{{{nameof(PlaceHolders.Message)}}}"] = message;
         place[$"{{{nameof(PlaceHolders.Level)}}}"] = level.ToString();
+        
+        place.AddDebugInfo(filePath, lineNumber, memberName);
 
         var formattedMessage = _interpolationString.Interpolate(place);
 
@@ -28,24 +34,36 @@ public class ConsoleLogger<T> : ILogger<T>
         Console.ResetColor();
     }
 
-    public void LogInfo(string message)
+    public void LogInfo(string message,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
     {
-        Log(message, LogLevel.Info);
+        Log(message, LogLevel.Info, filePath, lineNumber, memberName);
     }
 
-    public void LogWarning(string message)
+    public void LogWarning(string message,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
     {
-        Log(message, LogLevel.Warning);
+        Log(message, LogLevel.Warning, filePath, lineNumber, memberName);
     }
 
-    public void LogError(string message)
+    public void LogError(string message,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
     {
-        Log(message, LogLevel.Error);
+        Log(message, LogLevel.Error, filePath, lineNumber, memberName);
     }
 
-    public void LogDebug(string message)
+    public void LogDebug(string message,
+        [CallerFilePath] string filePath = "",
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerMemberName] string memberName = "")
     {
-        Log(message, LogLevel.Debug);
+        Log(message, LogLevel.Debug, filePath, lineNumber, memberName);
     }
 
     private ConsoleColor GetColorForLevel(LogLevel level)

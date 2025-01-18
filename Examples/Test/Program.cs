@@ -1,31 +1,23 @@
-﻿using GMutagen.v9.Contracts;
-using GMutagen.v9.Contracts.Interfaces;
-using GMutagen.v9.Contracts.Resolving;
+﻿using GMutagen.v9.Contracts.Interfaces;
 using GMutagen.v9.Contracts.Resolving.Contexts.Key;
-using GMutagen.v9.Contracts.Resolving.Nodes;
-using GMutagen.v9.Contracts.Resolving.Nodes.Cache;
 using GMutagen.v9.Contracts.Resolving.Nodes.Cache.Collection;
 using GMutagen.v9.Contracts.Resolving.Nodes.Cache.Context;
 using GMutagen.v9.Contracts.Resolving.Nodes.Cache.MetaData;
 using GMutagen.v9.Contracts.Resolving.Nodes.Composite;
-using GMutagen.v9.Contracts.Resolving.Nodes.From.Cache;
 using GMutagen.v9.Contracts.Resolving.Nodes.From.Cache.Collection;
 using GMutagen.v9.Contracts.Resolving.Nodes.From.Cache.Context;
 using GMutagen.v9.Contracts.Resolving.Nodes.Internal.Common;
 using GMutagen.v9.Contracts.Resolving.Nodes.Internal.Resolvers;
-using GMutagen.v9.Contracts.Resolving.Nodes.MetaData;
 using GMutagen.v9.Contracts.Resolving.Nodes.MetaData.Creation;
 using GMutagen.v9.Contracts.Resolving.Nodes.MetaData.Models;
 using GMutagen.v9.Generators;
 using GMutagen.v9.IO.Sources.Dictionary;
-using GMutagen.v9.Logging;
 using GMutagen.v9.Logging.Logger;
 using GMutagen.v9.Logging.Logger.Common;
 using GMutagen.v9.Logging.Messages;
 using GMutagen.v9.Objects;
 using GMutagen.v9.Objects.Factories;
 using GMutagen.v9.Objects.Templates;
-using GMutagen.v9.Values;
 using GMutagen.v9.Values.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -80,7 +72,8 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        var templateString = $"[{{{nameof(PlaceHolders.Date)}}} " +
+        var templateString =
+                             $"[{{{nameof(PlaceHolders.Date)}}} " +
                              $"{{{nameof(PlaceHolders.Time)}}}] " +
                              $"[{{{nameof(PlaceHolders.Level)}}}] " +
                              $"{{{nameof(PlaceHolders.Message)}}}";
