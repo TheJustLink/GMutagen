@@ -1,6 +1,6 @@
-using GMutagen.v9.Contracts.Resolving.Contexts.Option;
+using GMutagen.v9.Resolving.Contexts.Option;
 
-namespace GMutagen.v9.Logging.Messages;
+namespace GMutagen.v9.Logging.Messages.Realizations;
 
 public class OptionsDoNotContains : MessageWithSender
 {

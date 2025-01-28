@@ -1,6 +1,6 @@
 using System;
 
-namespace GMutagen.v9.Logging.Messages;
+namespace GMutagen.v9.Logging.Messages.Realizations;
 
 public class IsNotAssignable : MessageWithSender
 {

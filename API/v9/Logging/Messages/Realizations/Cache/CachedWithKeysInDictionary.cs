@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
-using GMutagen.v9.Contracts.Resolving.Contexts;
+using GMutagen.v9.Resolving.Contexts;
 
-namespace GMutagen.v9.Logging.Messages.Cache;
+namespace GMutagen.v9.Logging.Messages.Realizations.Cache;
 
 public class CachedWithKeysInDictionary : MessageWithSender
 {

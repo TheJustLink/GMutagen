@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace GMutagen.v9.Logging.Messages;
+namespace GMutagen.v9.Logging.Common;
 
 public class InterpolationString
 {

@@ -1,6 +1,6 @@
-using GMutagen.v9.Contracts.Resolving.Contexts.Key;
+using GMutagen.v9.Resolving.Contexts.Key;
 
-namespace GMutagen.v9.Logging.Messages;
+namespace GMutagen.v9.Logging.Messages.Realizations;
 
 public class KeysDoNotContains : MessageWithSender
 {

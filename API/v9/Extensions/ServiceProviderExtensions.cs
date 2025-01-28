@@ -1,6 +1,6 @@
 ﻿using System;
-using GMutagen.v9.Contracts.Resolving.Nodes.MetaData.Models;
 using GMutagen.v9.IO.Interfaces;
+using GMutagen.v9.Resolving.Nodes.MetaData.Models;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GMutagen.v9.Extensions;

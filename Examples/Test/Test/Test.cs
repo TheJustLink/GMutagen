@@ -1,5 +1,5 @@
 
-namespace GMutagen.v9.Test;
+namespace Test.Test;
 
 
 public class Test

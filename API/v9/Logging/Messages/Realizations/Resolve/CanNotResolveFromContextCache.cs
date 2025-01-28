@@ -1,6 +1,6 @@
-using GMutagen.v9.Contracts.Resolving.Contexts;
+using GMutagen.v9.Resolving.Contexts;
 
-namespace GMutagen.v9.Logging.Messages.Resolve;
+namespace GMutagen.v9.Logging.Messages.Realizations.Resolve;
 
 public class CanNotResolveFromContextCache : MessageWithSender
 {

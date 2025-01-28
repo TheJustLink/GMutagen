@@ -1,7 +1,6 @@
-using GMutagen.v9.Contracts.Resolving.Contexts;
-using GMutagen.v9.Logging.Messages;
+using GMutagen.v9.Resolving.Contexts;
 
-namespace GMutagen.v9.Contracts.Resolving.Nodes.Internal.Resolvers;
+namespace GMutagen.v9.Logging.Messages.Realizations;
 
 internal class CanNotResolveStorage : MessageWithSender
 {

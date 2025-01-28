@@ -1,6 +1,6 @@
 using GMutagen.v9.IO.Interfaces;
 
-namespace GMutagen.v9.Logging.Messages;
+namespace GMutagen.v9.Logging.Messages.Realizations;
 
 public class ReadWriteDoNotContains<T> : MessageWithSender where T : IReadWrite
 {

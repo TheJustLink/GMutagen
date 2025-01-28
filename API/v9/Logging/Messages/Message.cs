@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GMutagen.v9.Logging.Common;
 using GMutagen.v9.Logging.Logger;
 
 namespace GMutagen.v9.Logging.Messages;

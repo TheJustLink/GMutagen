@@ -1,7 +1,7 @@
-using GMutagen.v9.Contracts.Resolving.Contexts;
+using GMutagen.v9.Resolving.Contexts;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace GMutagen.v9.Logging.Messages.Cache;
+namespace GMutagen.v9.Logging.Messages.Realizations.Cache;
 
 public class CachedWithoutKeysInCollection : MessageWithSender
 {

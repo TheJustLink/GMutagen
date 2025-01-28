@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using GMutagen.v9.Contracts.Descriptors;
-using GMutagen.v9.Contracts.Resolving.Contexts;
+using GMutagen.v9.Resolving.Contexts;
 
-namespace GMutagen.v9.Logging.Messages;
+namespace GMutagen.v9.Logging.Messages.Realizations;
 
 public class CanNotMapContract : MessageWithSender
 {

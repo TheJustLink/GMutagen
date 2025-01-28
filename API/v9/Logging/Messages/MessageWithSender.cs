@@ -1,3 +1,5 @@
+using GMutagen.v9.Logging.Messages.Realizations;
+
 namespace GMutagen.v9.Logging.Messages;
 
 public abstract class MessageWithSender : Message

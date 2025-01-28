@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using GMutagen.v9.Logging.Common;
 using GMutagen.v9.Logging.Logger.Interfaces;
-using GMutagen.v9.Logging.Messages;
+using GMutagen.v9.Logging.Messages.Realizations;
 
 namespace GMutagen.v9.Logging.Logger;
 
