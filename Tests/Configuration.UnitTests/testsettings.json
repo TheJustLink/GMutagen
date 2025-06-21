@@ -1,0 +1,12 @@
+{
+  "RootSetting": "RootValue",
+  "SectionA": {
+    "Setting1": "Value1",
+    "Setting2": "42"
+  },
+  "SectionB": {
+    "Nested": {
+      "Bool": "true"
+    }
+  }
+}

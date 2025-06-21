@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using GMutagen.v9.Contracts.Descriptors;
 using GMutagen.v9.Contracts.Interfaces;
@@ -25,6 +26,9 @@ public class ObjectTemplateBuilder
     }
     public ObjectTemplateBuilder Add(ContractDescriptor contract)
     {
+        if(_contracts.Contains(contract))
+            Console.Write($"Template already contains contract of type {contract.Type.FullName}");
+        
         _contracts.Add(contract);
 
         return this;

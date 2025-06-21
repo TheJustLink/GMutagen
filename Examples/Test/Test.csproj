@@ -9,6 +9,8 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\API\API.csproj" />
+      <ProjectReference Include="..\..\EvBus\EvBus.csproj" />
+      <ProjectReference Include="..\..\Logger\Logger.csproj" />
     </ItemGroup>
 
     <ItemGroup>

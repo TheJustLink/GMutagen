@@ -51,8 +51,11 @@ public class ConfigurationProxy<TTargetKey, TTargetValue> : IConfiguration<TTarg
         return false;
     }
 
-    public void Add(TTargetKey key, TTargetValue value) =>
-        throw new NotSupportedException("Proxy configuration is read-only.");
+    public IConfiguration<TTargetKey, TTargetValue> AddSection(TTargetKey key)
+        => throw new NotSupportedException("Proxy configuration is read-only.");
+
+    public IConfiguration<TTargetKey, TTargetValue> Add(TTargetKey key, TTargetValue value)
+        => throw new NotSupportedException("Proxy configuration is read-only.");
 
     public void Remove(TTargetKey key) => throw new NotSupportedException("Proxy configuration is read-only.");
 
@@ -60,7 +63,7 @@ public class ConfigurationProxy<TTargetKey, TTargetValue> : IConfiguration<TTarg
     {
         foreach (var setting in _source.GetAllSettings())
         {
-            if (setting.Key is TTargetKey targetKey && setting.Value is TTargetValue targetValue)
+            if (setting.Key is TTargetKey targetKey && TryGetValue(targetKey, out var targetValue))
             {
                 yield return new KeyValuePair<TTargetKey, TTargetValue>(targetKey, targetValue);
             }

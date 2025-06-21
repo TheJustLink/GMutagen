@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using GMutagen.v9.Logging.Logger.Common;
-using GMutagen.v9.Logging.Logger.Interfaces;
 using GMutagen.v9.Logging.Messages.Realizations;
 using GMutagen.v9.Resolving.Nodes.Interfaces;
+using Logger.Logger.Common;
+using Logger.Logger.Interfaces;
 
 namespace GMutagen.v9.Resolving.Nodes.From.Cache.Dictionary;
 

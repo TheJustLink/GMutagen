@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using GMutagen.v9.Contracts.Descriptors;
 using GMutagen.v9.Contracts.Interfaces;
 using GMutagen.v9.Generators.Interfaces;
-using GMutagen.v9.Logging.Logger.Common;
-using GMutagen.v9.Logging.Logger.Interfaces;
 using GMutagen.v9.Logging.Messages.Realizations;
 using GMutagen.v9.Objects;
 using GMutagen.v9.Objects.Interfaces;
@@ -13,6 +11,8 @@ using GMutagen.v9.Resolving.Contexts.Key;
 using GMutagen.v9.Resolving.Contexts.Option;
 using GMutagen.v9.Resolving.Nodes.Decorator;
 using GMutagen.v9.Resolving.Nodes.Interfaces;
+using Logger.Logger.Common;
+using Logger.Logger.Interfaces;
 
 namespace GMutagen.v9.Resolving.Nodes.Internal.Resolvers;
 

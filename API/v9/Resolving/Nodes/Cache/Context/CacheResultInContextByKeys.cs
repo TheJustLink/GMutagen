@@ -1,9 +1,9 @@
-using GMutagen.v9.Logging.Logger.Common;
-using GMutagen.v9.Logging.Logger.Interfaces;
 using GMutagen.v9.Logging.Messages.Realizations.Cache;
 using GMutagen.v9.Resolving.Contexts.Key;
 using GMutagen.v9.Resolving.Nodes.Decorator;
 using GMutagen.v9.Resolving.Nodes.Interfaces;
+using Logger.Logger.Common;
+using Logger.Logger.Interfaces;
 
 namespace GMutagen.v9.Resolving.Nodes.Cache.Context;
 

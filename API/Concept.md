@@ -35,12 +35,4 @@ var snake = objectBuilder.Create(scope, config);
 // or
 var snake = objectBuilder.Create(scope)
 	.Set<I>
-
-
-
-
-```
-
-```cs
-Console.WriteLine();
 ```

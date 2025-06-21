@@ -2,7 +2,7 @@ using System;
 
 namespace GMutagen.v9.Resolving.Attributes;
 
-[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
 public class IdAttribute : Attribute
 {
     public object Id;

@@ -1,79 +1,14 @@
 using System.Text;
-using GMutagen.IO;
-using GMutagen.Values;
+using EventBus;
+using GMutagen.v9.IO.Interfaces;
+using GMutagen.v9.Values.Interfaces;
+using Identity.Interfaces;
+
 
 namespace GMutagen.v9.Events;
 
 using System;
 using System.Collections.Generic;
-
-public class EventBus
-{
-    private readonly Dictionary<string, Event> _subscribers = new();
-
-    public void Subscribe(EventDescriptor descriptor, Action handler)
-    {
-        if (descriptor == null)
-            throw new ArgumentNullException(nameof(descriptor));
-
-        if (handler == null)
-            throw new ArgumentNullException(nameof(handler));
-
-        string eventPath = descriptor.Id;
-
-        if (!_subscribers.ContainsKey(eventPath))
-        {
-            _subscribers[eventPath].Subscribe(handler);
-        }
-    }
-
-    public void Unsubscribe(EventDescriptor descriptor, Action handler)
-    {
-        if (descriptor == null)
-            throw new ArgumentNullException(nameof(descriptor));
-
-        if (handler == null)
-            throw new ArgumentNullException(nameof(handler));
-
-        string eventPath = descriptor.Id;
-
-        if (_subscribers.ContainsKey(eventPath))
-        {
-            _subscribers[eventPath].Unsubscribe(handler);
-        }
-    }
-
-    public void PublishExact(EventDescriptor descriptor)
-    {
-        if (descriptor == null)
-            throw new ArgumentNullException(nameof(descriptor));
-
-        string eventPath = descriptor.Id;
-
-        if (_subscribers.ContainsKey(eventPath))
-        {
-            _subscribers[eventPath]?.Fire();
-        }
-    }
-
-    public void PublishToAll(EventDescriptor ev)
-    {
-        if (ev == null)
-            throw new ArgumentNullException(nameof(ev));
-
-        string eventPath = ev.Id;
-
-        PublishExact(ev);
-
-        var segments = eventPath.Split('/');
-        for (int i = segments.Length - 1; i > 0; i--)
-        {
-            var parentPath = string.Join("/", segments, 0, i);
-            var parentEvent = new EventDescriptor(parentPath);
-            PublishExact(parentEvent);
-        }
-    }
-}
 
 public class Path
 {
@@ -133,43 +68,33 @@ public class Path
     }
 }
 
-public class EventDescriptor(string id)
-{
-    public Path Id { get; set; } = id;
-}
 
-public class Event(Action listeners = null) : IEvent
+public class ValueEventsStorage(Dictionary<ISingleId, IValueEvents> translationMap) : IReadWrite<ISingleId, IValueEvents>
 {
-    public IEvent Fire()
+    private readonly Dictionary<ISingleId, IValueEvents> _translationMap = translationMap;
+
+    public int Count { get; }
+
+    public IValueEvents this[ISingleId id]
     {
-        listeners?.Invoke();
-        return this;
+        get => throw new NotImplementedException();
+        set => throw new NotImplementedException();
     }
 
-    public IEvent Subscribe(Action action)
+    public void Write(ISingleId id, IValueEvents value)
     {
-        listeners += action;
-        return this;
+        throw new NotImplementedException();
     }
 
-    public IEvent Unsubscribe(Action action)
+    public IValueEvents Read(ISingleId id)
     {
-        listeners -= action;
-        return this;
+        throw new NotImplementedException();
     }
-}
 
-public interface IEvent
-{
-    IEvent Fire();
-    IEvent Subscribe(Action action);
-    IEvent Unsubscribe(Action action);
-}
-
-public class ValueEventsStorage<TId>(IRead<IValue<TId>, IValueEvents> reader, IWrite<IValue<TId>, IValueEvents> writer)
-    : ReadWrite<IValue<TId>, IValueEvents>(reader, writer)
-    where TId : notnull
-{
+    public bool Contains(ISingleId id)
+    {
+        throw new NotImplementedException();
+    }
 }
 
 public class ValueEvents<T> : ValueDecorator<T>, IValueEvents
@@ -222,8 +147,9 @@ public abstract class ValueDecorator<T>(IValue<T> child) : IValue<T>
     public abstract T Value { get; set; }
 }
 
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
 public class GenerateValueEventsAttribute : Attribute
 {
 }
+
 

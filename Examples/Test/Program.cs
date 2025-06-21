@@ -1,13 +1,12 @@
-﻿using GMutagen.v9.Contracts.Interfaces;
+﻿using EventBus;
+using GMutagen.v9.Contracts.Interfaces;
 using GMutagen.v9.Generators;
 using GMutagen.v9.IO.Sources.Dictionary;
-using GMutagen.v9.Logging.Common;
-using GMutagen.v9.Logging.Logger;
-using GMutagen.v9.Logging.Logger.Common;
-using GMutagen.v9.Logging.Messages.Realizations;
 using GMutagen.v9.Objects;
 using GMutagen.v9.Objects.Factories;
+using GMutagen.v9.Objects.Interfaces;
 using GMutagen.v9.Objects.Templates;
+using GMutagen.v9.Resolving.Attributes;
 using GMutagen.v9.Resolving.Contexts.Key;
 using GMutagen.v9.Resolving.Nodes.Cache.Collection;
 using GMutagen.v9.Resolving.Nodes.Cache.Context;
@@ -20,6 +19,10 @@ using GMutagen.v9.Resolving.Nodes.Internal.Resolvers;
 using GMutagen.v9.Resolving.Nodes.MetaData.Creation;
 using GMutagen.v9.Resolving.Nodes.MetaData.Models;
 using GMutagen.v9.Values.Interfaces;
+using Logger.Common;
+using Logger.Extensions;
+using Logger.Logger;
+using Logger.Logger.Common;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Test;
@@ -74,11 +77,11 @@ public class Program
     public static void Main(string[] args)
     {
         var templateString =
-                             $"[{{{nameof(PlaceHolders.Date)}}} " +
-                             $"{{{nameof(PlaceHolders.Time)}}}] " +
-                             $"[{{{nameof(PlaceHolders.Level)}}}] " +
-                             $"{{{nameof(PlaceHolders.Message)}}}";
-        
+            $"[{{{nameof(PlaceHolders.Date)}}} " +
+            $"{{{nameof(PlaceHolders.Time)}}}] " +
+            $"[{{{nameof(PlaceHolders.Level)}}}] " +
+            $"{{{nameof(PlaceHolders.Message)}}}";
+
         var logger = new ConsoleLogger<Global>(new InterpolationString(templateString).AddInfo());
 
         var serviceCollection = new ServiceCollection();
@@ -108,7 +111,8 @@ public class Program
             .Add(createValueMeta)
             .Add(valueResolverNode);
 
-        var fromValueMetaCache = new ValueFromMetaCache<int, int>(fullStorageResolver, KeyType.Id, valueMetaStorage, logger);
+        var fromValueMetaCache =
+            new ValueFromMetaCache<int, int>(fullStorageResolver, KeyType.Id, valueMetaStorage, logger);
 
         var fullValueResolver = new CompositeResolverNode()
             .Add(fromValueMetaCache)
@@ -190,3 +194,151 @@ public class Program
         Console.ReadKey();
     }
 }
+
+//  Expected api:
+
+
+public enum Stats
+{
+    Health,
+}
+
+public class Golem
+{
+    public ObjectTemplate Create()
+        => new ObjectTemplateBuilder()
+            .AddDefaultAttackService()
+            .AddDefaultTakeDamageService()
+            .AddOneSlotService()
+            .Build();
+}
+
+public static class AttackServiceConfigurationExtensions
+{
+    public static ObjectTemplateBuilder AddDefaultAttackService(this ObjectTemplateBuilder builder)
+    {
+        builder.Add<IAttackService, AttackService>();
+        return builder;
+    }
+}
+public static class TakeDamageServiceConfigurationExtensions
+{
+    public static ObjectTemplateBuilder AddDefaultTakeDamageService(this ObjectTemplateBuilder builder)
+    {
+        builder.Add<ITakeDamageService, DefaultTakeDamageService>();
+        return builder;
+    }
+}
+
+public static class SlotServiceConfigurationExtensions
+{
+    public static ObjectTemplateBuilder AddOneSlotService(this ObjectTemplateBuilder builder)
+    {
+        builder.Add<ISlot>(new Slot());
+        return builder;
+    }
+}
+
+public interface ITakeDamageService : IContract
+{
+    void TakeDamage(DamageData damage);
+}
+public interface ISelfInit
+{
+    void InitSelf();
+}
+public class DefaultTakeDamageService(IValueWithEvents<int> health) : ITakeDamageService, ISelfInit
+{
+    [Id(Stats.Health)]
+    private readonly IValueWithEvents<int> _health = health;
+
+    public void InitSelf()
+    {
+        _health.Events.AfterChanged.Subscribe(OnAfterHealthChanged);
+    }
+    
+    public void TakeDamage(DamageData damage)
+    {
+        _health.Value -= damage.Amount;
+    }
+
+    private void OnAfterHealthChanged()
+    {
+        Console.WriteLine("After health changed");
+    }
+}
+
+public class DamageData(int amount)
+{
+    public int Amount { get; } = amount;
+}
+
+
+public interface IAttackService : IContract
+{
+    void Perform();
+}
+
+public class AttackService(ISlot slot) : IAttackService
+{
+    public Event BeforeAttack;
+    public Event AfterAttack;
+    
+    public void Perform()
+    {
+        BeforeAttack?.Fire();
+        
+        var slotContent = slot.Get();
+
+        if (slotContent.TryGet<IWeapon>(out var weapon) is false)
+            return;
+
+        weapon.Attack();
+        AfterAttack?.Fire();
+    }
+}
+
+public interface ISlot : IContract
+{
+    void Set(IObject obj);
+    IObject Get();
+    IObject Take();
+}
+
+public class Slot(IObject content = null!) : ISlot
+{
+    public void Set(IObject obj)
+    {
+        content = obj;
+    }
+
+    public IObject Get()
+    {
+        return content;
+    }
+
+    public IObject Take()
+    {
+        var obj = content;
+        content = null!;
+        return obj;
+    }
+}
+
+
+public interface IWeapon : IContract
+{
+    void Attack();
+}
+public interface IMeleeWeapon : IWeapon
+{
+}
+public class Sword : IMeleeWeapon
+{
+    public void Attack()
+    {
+        Console.WriteLine("Perform attack with sword");
+    }
+}
+
+

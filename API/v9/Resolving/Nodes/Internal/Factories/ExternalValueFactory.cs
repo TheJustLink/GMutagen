@@ -1,9 +1,9 @@
 using GMutagen.v9.IO.Interfaces;
-using GMutagen.v9.Logging.Logger.Common;
-using GMutagen.v9.Logging.Logger.Interfaces;
 using GMutagen.v9.Logging.Messages.Realizations;
 using GMutagen.v9.Resolving.Nodes.Internal.Factories.Interfaces;
 using GMutagen.v9.Values;
+using Logger.Logger.Common;
+using Logger.Logger.Interfaces;
 
 namespace GMutagen.v9.Resolving.Nodes.Internal.Factories;
 

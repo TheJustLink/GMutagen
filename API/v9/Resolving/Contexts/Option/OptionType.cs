@@ -6,6 +6,5 @@ public enum OptionType
     Contracts,
     ContractsReversed,
     Info,
-    Name,
     SemanticName,
 }

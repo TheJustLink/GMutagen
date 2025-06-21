@@ -20,4 +20,17 @@ public class Object<TId> : IObject<TId>
     {
         return (TContract)_contracts[typeof(TContract)];
     }
+
+    public bool TryGet<TContract>(out TContract contract) where TContract : class
+    {
+        var result = _contracts.TryGetValue(typeof(TContract), out var contractObj);
+        if (!result)
+        {
+            contract = null!;
+            return result;
+        }
+
+        contract = (TContract)contractObj!;
+        return result;
+    }
 }

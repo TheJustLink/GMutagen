@@ -1,7 +1,5 @@
 using System;
 using GMutagen.v9.IO.Interfaces;
-using GMutagen.v9.Logging.Logger.Common;
-using GMutagen.v9.Logging.Logger.Interfaces;
 using GMutagen.v9.Logging.Messages.Realizations;
 using GMutagen.v9.Resolving.Contexts.Key;
 using GMutagen.v9.Resolving.Nodes.Decorator;
@@ -10,6 +8,8 @@ using GMutagen.v9.Resolving.Nodes.Internal.Factories;
 using GMutagen.v9.Resolving.Nodes.Internal.Factories.Interfaces;
 using GMutagen.v9.Resolving.Nodes.MetaData.Models;
 using GMutagen.v9.Values.Interfaces;
+using Logger.Logger.Common;
+using Logger.Logger.Interfaces;
 
 namespace GMutagen.v9.Resolving.Nodes.Cache.MetaData;
 
